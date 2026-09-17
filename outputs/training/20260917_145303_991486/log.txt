@@ -1,0 +1,498 @@
+(.venv) vinh_shindo@DESKTOP-9PK3K23:~/safewatch-fall-detector-edge-ai/src$ cd /home/vinh_shindo/safewatch-fall-detector-edge-ai
+source /home/vinh_shindo/FuelSentinel-AI/.venv/bin/activate
+cd src
+PYTHONPATH=. python3 train.py
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789631581.117305   76965 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+I0000 00:00:1789631581.171892   76965 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPUinstructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1789631582.593555   76965 cudart_stub.cc:31] Could not find cuda drivers on your machine, GPU will not be used.
+E0000 00:00:1789631583.975790   76965 cuda_executor.cc:1737] INTERNAL: CUDA Runtime error: Failed call to cudaGetRuntimeVersion: Error loading CUDA libraries. GPU will not be used.: Error loading CUDA libraries. GPU will not be used.
+W0000 00:00:1789631583.990890   76965 gpu_device.cc:2365] Cannot dlopen some GPU libraries. Please make sure the missinglibraries mentioned above are installed properly if you would like to use GPU. Follow the guide at https://www.tensorflow.org/install/gpu for how to download and setup the required libraries for your platform.
+Skipping registering GPU devices...
+===== DATASET ĐÃ CHUẨN BỊ =====
+Thư mục QMI: /home/vinh_shindo/safewatch-fall-detector-edge-ai/data/raw/QMI
+Thư mục WEDA 5 Hz: /home/vinh_shindo/safewatch-fall-detector-edge-ai/data/raw/WEDA-FALL/dataset/5Hz
+Số file CSV QMI: 9
+Số file accelerometer WEDA: 969
+WEDA session hợp lệ: 962
+Đơn vị phát hiện: {'m_s2': 969}
+Số file lỗi/bỏ qua: 0
+
+Phân phối activity WEDA:
+D01    68
+D02    42
+D03    52
+D04    71
+D05    42
+D06    42
+D07    42
+D08    40
+D09    68
+D10    74
+D11    71
+F01    42
+F02    42
+F03    42
+F04    42
+F05    42
+F06    42
+F07    42
+F08    56
+Name: count, dtype: int64
+
+Phân phối nhãn WEDA:
+NON_FALL    612
+FALL        350
+Name: count, dtype: int64
+QMI session hợp lệ: 175
+File lỗi: 0
+
+Số session theo hoạt động:
+activity    label   
+Fall_Back   FALL        14
+Fall_Front  FALL        15
+Fall_Left   FALL        11
+Fall_Right  FALL        14
+Jumping     NON_FALL     7
+Other       NON_FALL    34
+Sitting     NON_FALL    34
+Standing    NON_FALL    13
+Walking     NON_FALL    33
+dtype: int64
+
+Số mẫu sau khi xuống 5 Hz:
+count    175.0
+mean      25.0
+std        0.0
+min       25.0
+25%       25.0
+50%       25.0
+75%       25.0
+max       25.0
+Name: samples_5hz, dtype: float64
+
+===== WEDA =====
+label
+FALL        350
+NON_FALL    612
+dtype: int64
+          samples  median_magnitude  max_magnitude
+count  962.000000        962.000000     962.000000
+mean    62.726611          1.012694       2.877432
+std     28.709190          0.047151       1.408656
+min     20.000000          0.884240       1.064127
+25%     44.000000          0.998065       1.656434
+50%     57.000000          1.003100       2.462447
+75%     72.750000          1.012052       4.004064
+max    199.000000          1.599947       6.882359
+
+===== QMI PERSON A =====
+label
+FALL         54
+NON_FALL    121
+dtype: int64
+       samples  median_magnitude  max_magnitude
+count    175.0        175.000000     175.000000
+mean      25.0          1.004846       1.126309
+std        0.0          0.204018       0.214317
+min       25.0          0.588994       0.817568
+25%       25.0          0.923751       1.014996
+50%       25.0          1.010828       1.029685
+75%       25.0          1.025488       1.117497
+max       25.0          1.688423       2.073189
+WEDA train sessions: 644 {'NON_FALL': 419, 'FALL': 225}
+WEDA validation sessions: 146 {'NON_FALL': 96, 'FALL': 50}
+WEDA test sessions: 172 {'NON_FALL': 97, 'FALL': 75}
+QMI train sessions: 140 {'NON_FALL': 97, 'FALL': 43}
+QMI validation sessions: 35 {'NON_FALL': 24, 'FALL': 11}
+Model: "safewatch_fall_5hz"
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━┓
+┃ Layer (type)                         ┃ Output Shape                ┃         Param # ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━┩
+│ sensor_window (InputLayer)           │ (None, 20, 4)               │               0 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ conv1 (Conv1D)                       │ (None, 20, 16)              │             208 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ pool1 (MaxPooling1D)                 │ (None, 10, 16)              │               0 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ conv2 (Conv1D)                       │ (None, 10, 24)              │           1,176 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ global_average                       │ (None, 24)                  │               0 │
+│ (GlobalAveragePooling1D)             │                             │                 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ dense_features (Dense)               │ (None, 16)                  │             400 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ dropout (Dropout)                    │ (None, 16)                  │               0 │
+├──────────────────────────────────────┼─────────────────────────────┼─────────────────┤
+│ class_output (Dense)                 │ (None, 2)                   │              34 │
+└──────────────────────────────────────┴─────────────────────────────┴─────────────────┘
+ Total params: 1,818 (7.10 KB)
+ Trainable params: 1,818 (7.10 KB)
+ Non-trainable params: 0 (0.00 B)
+Epoch 1/60
+65/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.4861 - loss: 0.6288 
+Epoch 1: val_loss improved from None to 0.46746, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 2s 6ms/step - accuracy: 0.6293 - loss: 0.5856 - val_accuracy: 0.8692 - val_loss: 0.4675 - learning_rate: 0.0010
+Epoch 2/60
+66/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.7789 - loss: 0.4679 
+Epoch 2: val_loss improved from 0.46746 to 0.32090, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 4ms/step - accuracy: 0.7955 - loss: 0.4378 - val_accuracy: 0.8861 - val_loss: 0.3209 - learning_rate: 0.0010
+Epoch 3/60
+69/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8419 - loss: 0.3578 
+Epoch 3: val_loss improved from 0.32090 to 0.26884, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 4ms/step - accuracy: 0.8586 - loss: 0.3388 - val_accuracy: 0.9030 - val_loss: 0.2688 - learning_rate: 0.0010
+Epoch 4/60
+62/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.8769 - loss: 0.3089 
+Epoch 4: val_loss improved from 0.26884 to 0.25767, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 4ms/step - accuracy: 0.8851 - loss: 0.3014 - val_accuracy: 0.9030 - val_loss: 0.2577 - learning_rate: 0.0010
+Epoch 5/60
+69/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9066 - loss: 0.2691 
+Epoch 5: val_loss improved from 0.25767 to 0.23588, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 4ms/step - accuracy: 0.9000 - loss: 0.2778 - val_accuracy: 0.9198 - val_loss: 0.2359 - learning_rate: 0.0010
+Epoch 6/60
+69/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9066 - loss: 0.2700 
+Epoch 6: val_loss did not improve from 0.23588
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9086 - loss: 0.2596 - val_accuracy: 0.9114 - val_loss: 0.2458 - learning_rate: 0.0010
+Epoch 7/60
+68/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9119 - loss: 0.2395 
+Epoch 7: val_loss improved from 0.23588 to 0.19646, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 4ms/step - accuracy: 0.9140 - loss: 0.2406 - val_accuracy: 0.9409 - val_loss: 0.1965 - learning_rate: 0.0010
+Epoch 8/60
+67/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9121 - loss: 0.2252 
+Epoch 8: val_loss did not improve from 0.19646
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9144 - loss: 0.2297 - val_accuracy: 0.9283 - val_loss: 0.2168 - learning_rate: 0.0010
+Epoch 9/60
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9214 - loss: 0.2114 
+Epoch 9: val_loss did not improve from 0.19646
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9158 - loss: 0.2319 - val_accuracy: 0.9283 - val_loss: 0.2137 - learning_rate: 0.0010
+Epoch 10/60
+49/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9206 - loss: 0.2044 
+Epoch 10: ReduceLROnPlateau reducing learning rate to 0.0005000000237487257.
+
+Epoch 10: val_loss did not improve from 0.19646
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9230 - loss: 0.2211 - val_accuracy: 0.9409 - val_loss: 0.1997 - learning_rate: 0.0010
+Epoch 11/60
+48/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9202 - loss: 0.2203 
+Epoch 11: val_loss improved from 0.19646 to 0.18932, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9243 - loss: 0.2058 - val_accuracy: 0.9409 - val_loss: 0.1893 - learning_rate: 5.0000e-04
+Epoch 12/60
+67/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9267 - loss: 0.2132 
+Epoch 12: val_loss did not improve from 0.18932
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9261 - loss: 0.2098 - val_accuracy: 0.9283 - val_loss: 0.2155 - learning_rate: 5.0000e-04
+Epoch 13/60
+49/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9166 - loss: 0.2196 
+Epoch 13: val_loss improved from 0.18932 to 0.18200, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9257 - loss: 0.2009 - val_accuracy: 0.9451 - val_loss: 0.1820 - learning_rate: 5.0000e-04
+Epoch 14/60
+50/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9254 - loss: 0.2005 
+Epoch 14: val_loss did not improve from 0.18200
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9315 - loss: 0.1939 - val_accuracy: 0.9409 - val_loss: 0.1966 - learning_rate: 5.0000e-04
+Epoch 15/60
+50/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9352 - loss: 0.2109 
+Epoch 15: val_loss improved from 0.18200 to 0.18137, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9360 - loss: 0.1956 - val_accuracy: 0.9494 - val_loss: 0.1814 - learning_rate: 5.0000e-04
+Epoch 16/60
+50/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9299 - loss: 0.1923 
+Epoch 16: val_loss did not improve from 0.18137
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9306 - loss: 0.1919 - val_accuracy: 0.9283 - val_loss: 0.2077 - learning_rate: 5.0000e-04
+Epoch 17/60
+54/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9338 - loss: 0.1927 
+Epoch 17: val_loss did not improve from 0.18137
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9324 - loss: 0.1958 - val_accuracy: 0.9409 - val_loss: 0.1890 - learning_rate: 5.0000e-04
+Epoch 18/60
+49/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9409 - loss: 0.1588 
+Epoch 18: ReduceLROnPlateau reducing learning rate to 0.0002500000118743628.
+
+Epoch 18: val_loss did not improve from 0.18137
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9342 - loss: 0.1881 - val_accuracy: 0.9325 - val_loss: 0.2066 - learning_rate: 5.0000e-04
+Epoch 19/60
+50/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9298 - loss: 0.1836 
+Epoch 19: val_loss improved from 0.18137 to 0.17821, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9315 - loss: 0.1841 - val_accuracy: 0.9494 - val_loss: 0.1782 - learning_rate: 2.5000e-04
+Epoch 20/60
+48/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9414 - loss: 0.1852 
+Epoch 20: val_loss improved from 0.17821 to 0.17311, saving model to /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9342 - loss: 0.1873 - val_accuracy: 0.9536 - val_loss: 0.1731 - learning_rate: 2.5000e-04
+Epoch 21/60
+48/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9430 - loss: 0.1734 
+Epoch 21: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9419 - loss: 0.1772 - val_accuracy: 0.9325 - val_loss: 0.1958 - learning_rate: 2.5000e-04
+Epoch 22/60
+51/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9313 - loss: 0.1921 
+Epoch 22: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9369 - loss: 0.1860 - val_accuracy: 0.9409 - val_loss: 0.1847 - learning_rate: 2.5000e-04
+Epoch 23/60
+49/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9420 - loss: 0.1828 
+Epoch 23: ReduceLROnPlateau reducing learning rate to 0.0001250000059371814.
+
+Epoch 23: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9378 - loss: 0.1796 - val_accuracy: 0.9451 - val_loss: 0.1815 - learning_rate: 2.5000e-04
+Epoch 24/60
+51/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9416 - loss: 0.1908 
+Epoch 24: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9410 - loss: 0.1787 - val_accuracy: 0.9283 - val_loss: 0.2048 - learning_rate: 1.2500e-04
+Epoch 25/60
+51/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9374 - loss: 0.1812 
+Epoch 25: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9396 - loss: 0.1826 - val_accuracy: 0.9409 - val_loss: 0.1891 - learning_rate: 1.2500e-04
+Epoch 26/60
+43/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9476 - loss: 0.1761 
+Epoch 26: ReduceLROnPlateau reducing learning rate to 6.25000029685907e-05.
+
+Epoch 26: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9432 - loss: 0.1811 - val_accuracy: 0.9409 - val_loss: 0.1884 - learning_rate: 1.2500e-04
+Epoch 27/60
+48/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9432 - loss: 0.1774 
+Epoch 27: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9414 - loss: 0.1774 - val_accuracy: 0.9409 - val_loss: 0.1916 - learning_rate: 6.2500e-05
+Epoch 28/60
+48/70 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9510 - loss: 0.1466 
+Epoch 28: val_loss did not improve from 0.17311
+70/70 ━━━━━━━━━━━━━━━━━━━━ 0s 3ms/step - accuracy: 0.9423 - loss: 0.1761 - val_accuracy: 0.9409 - val_loss: 0.1879 - learning_rate: 6.2500e-05
+Epoch 28: early stopping
+Restoring model weights from the end of the best epoch: 20.
+Đã lưu model WEDA: /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/weda_pretrained_5hz.keras
+
+===== WEDA test sau pretrain =====
+              precision    recall  f1-score   support
+
+    NON_FALL     0.9474    0.9326    0.9399       193
+        FALL     0.8333    0.8667    0.8497        75
+
+    accuracy                         0.9142       268
+   macro avg     0.8904    0.8997    0.8948       268
+weighted avg     0.9155    0.9142    0.9147       268
+
+Fine-tune shape: (2520, 20, 4)
+Class counts: {np.int64(0): np.int64(1688), np.int64(1): np.int64(832)}
+Class weights: {0: 0.7464454976303317, 1: 1.5144230769230769}
+Epoch 1/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 1s 3ms/step - accuracy: 0.7976 - loss: 0.6532 - val_accuracy: 0.7714 - val_loss: 0.5006 - learning_rate: 1.0000e-04
+Epoch 2/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8222 - loss: 0.5238 - val_accuracy: 0.8286 - val_loss: 0.4319 - learning_rate: 1.0000e-04
+Epoch 3/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8472 - loss: 0.4399 - val_accuracy: 0.8571 - val_loss: 0.4124 - learning_rate: 1.0000e-04
+Epoch 4/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8508 - loss: 0.4149 - val_accuracy: 0.8571 - val_loss: 0.4093 - learning_rate: 1.0000e-04
+Epoch 5/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8619 - loss: 0.3982 - val_accuracy: 0.8571 - val_loss: 0.4098 - learning_rate: 1.0000e-04
+Epoch 6/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8579 - loss: 0.3904 - val_accuracy: 0.8571 - val_loss: 0.4109 - learning_rate: 1.0000e-04
+Epoch 7/35
+133/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8485 - loss: 0.3931 
+Epoch 7: ReduceLROnPlateau reducing learning rate to 4.999999873689376e-05.
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8579 - loss: 0.3929 - val_accuracy: 0.8571 - val_loss: 0.4110 - learning_rate: 1.0000e-04
+Epoch 8/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8623 - loss: 0.3880 - val_accuracy: 0.8571 - val_loss: 0.4099 - learning_rate: 5.0000e-05
+Epoch 9/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8687 - loss: 0.3762 - val_accuracy: 0.8571 - val_loss: 0.4078 - learning_rate: 5.0000e-05
+Epoch 10/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8619 - loss: 0.3767 - val_accuracy: 0.8571 - val_loss: 0.4062 - learning_rate: 5.0000e-05
+Epoch 11/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8694 - loss: 0.3752 - val_accuracy: 0.8571 - val_loss: 0.4043 - learning_rate: 5.0000e-05
+Epoch 12/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8714 - loss: 0.3714 - val_accuracy: 0.8571 - val_loss: 0.4021 - learning_rate: 5.0000e-05
+Epoch 13/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8742 - loss: 0.3711 - val_accuracy: 0.8571 - val_loss: 0.4003 - learning_rate: 5.0000e-05
+Epoch 14/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8710 - loss: 0.3762 - val_accuracy: 0.8571 - val_loss: 0.3982 - learning_rate: 5.0000e-05
+Epoch 15/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8754 - loss: 0.3705 - val_accuracy: 0.8571 - val_loss: 0.3963 - learning_rate: 5.0000e-05
+Epoch 16/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8726 - loss: 0.3614 - val_accuracy: 0.8571 - val_loss: 0.3943 - learning_rate: 5.0000e-05
+Epoch 17/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8782 - loss: 0.3557 - val_accuracy: 0.8571 - val_loss: 0.3925 - learning_rate: 5.0000e-05
+Epoch 18/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8806 - loss: 0.3593 - val_accuracy: 0.8571 - val_loss: 0.3894 - learning_rate: 5.0000e-05
+Epoch 19/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8817 - loss: 0.3606 - val_accuracy: 0.8571 - val_loss: 0.3876 - learning_rate: 5.0000e-05
+Epoch 20/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8841 - loss: 0.3541 - val_accuracy: 0.8571 - val_loss: 0.3857 - learning_rate: 5.0000e-05
+Epoch 21/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8813 - loss: 0.3612 - val_accuracy: 0.8571 - val_loss: 0.3843 - learning_rate: 5.0000e-05
+Epoch 22/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8897 - loss: 0.3528 - val_accuracy: 0.8571 - val_loss: 0.3827 - learning_rate: 5.0000e-05
+Epoch 23/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8857 - loss: 0.3479 - val_accuracy: 0.8571 - val_loss: 0.3800 - learning_rate: 5.0000e-05
+Epoch 24/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8845 - loss: 0.3518 - val_accuracy: 0.8571 - val_loss: 0.3778 - learning_rate: 5.0000e-05
+Epoch 25/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8837 - loss: 0.3434 - val_accuracy: 0.8571 - val_loss: 0.3776 - learning_rate: 5.0000e-05
+Epoch 26/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8869 - loss: 0.3478 - val_accuracy: 0.8571 - val_loss: 0.3757 - learning_rate: 5.0000e-05
+Epoch 27/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8869 - loss: 0.3423 - val_accuracy: 0.8571 - val_loss: 0.3745 - learning_rate: 5.0000e-05
+Epoch 28/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8921 - loss: 0.3512 - val_accuracy: 0.8571 - val_loss: 0.3731 - learning_rate: 5.0000e-05
+Epoch 29/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8921 - loss: 0.3438 - val_accuracy: 0.8571 - val_loss: 0.3721 - learning_rate: 5.0000e-05
+Epoch 30/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8861 - loss: 0.3403 - val_accuracy: 0.8571 - val_loss: 0.3704 - learning_rate: 5.0000e-05
+Epoch 31/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8885 - loss: 0.3359 - val_accuracy: 0.8571 - val_loss: 0.3692 - learning_rate: 5.0000e-05
+Epoch 32/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8913 - loss: 0.3461 - val_accuracy: 0.8571 - val_loss: 0.3681 - learning_rate: 5.0000e-05
+Epoch 33/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8901 - loss: 0.3453 - val_accuracy: 0.8571 - val_loss: 0.3677 - learning_rate: 5.0000e-05
+Epoch 34/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8917 - loss: 0.3437 - val_accuracy: 0.8571 - val_loss: 0.3662 - learning_rate: 5.0000e-05
+Epoch 35/35
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8948 - loss: 0.3354 - val_accuracy: 0.8571 - val_loss: 0.3644 - learning_rate: 5.0000e-05
+Restoring model weights from the end of the best epoch: 35.
+Epoch 1/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 1s 3ms/step - accuracy: 0.8944 - loss: 0.3346 - val_accuracy: 0.8571 - val_loss: 0.3626
+Epoch 2/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8933 - loss: 0.3299 - val_accuracy: 0.8571 - val_loss: 0.3609
+Epoch 3/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8913 - loss: 0.3368 - val_accuracy: 0.8571 - val_loss: 0.3590
+Epoch 4/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8944 - loss: 0.3288 - val_accuracy: 0.8571 - val_loss: 0.3572
+Epoch 5/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8960 - loss: 0.3305 - val_accuracy: 0.8571 - val_loss: 0.3557
+Epoch 6/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8921 - loss: 0.3412 - val_accuracy: 0.8571 - val_loss: 0.3544
+Epoch 7/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8905 - loss: 0.3303 - val_accuracy: 0.8571 - val_loss: 0.3528
+Epoch 8/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8968 - loss: 0.3308 - val_accuracy: 0.8571 - val_loss: 0.3513
+Epoch 9/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8976 - loss: 0.3307 - val_accuracy: 0.8571 - val_loss: 0.3500
+Epoch 10/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.9012 - loss: 0.3194 - val_accuracy: 0.8571 - val_loss: 0.3488
+Epoch 11/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8948 - loss: 0.3284 - val_accuracy: 0.8571 - val_loss: 0.3477
+Epoch 12/12
+158/158 ━━━━━━━━━━━━━━━━━━━━ 0s 2ms/step - accuracy: 0.8933 - loss: 0.3342 - val_accuracy: 0.8571 - val_loss: 0.3466
+Restoring model weights from the end of the best epoch: 12.
+Đã lưu: /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/person_a_finetuned_5hz.keras
+Threshold được chọn:
+threshold    0.710000
+precision    1.000000
+recall       0.636364
+f1           0.777778
+f2           0.686275
+Name: 36, dtype: float64
+
+FALL_THRESHOLD: 0.7100000000000003
+HIGH_FALL_THRESHOLD: 0.8600000000000003
+
+===== QMI PERSON A — session validation =====
+              precision    recall  f1-score   support
+
+    NON_FALL     0.8571    1.0000    0.9231        24
+        FALL     1.0000    0.6364    0.7778        11
+
+    accuracy                         0.8857        35
+   macro avg     0.9286    0.8182    0.8504        35
+weighted avg     0.9020    0.8857    0.8774        35
+
+/home/vinh_shindo/safewatch-fall-detector-edge-ai/src/evaluation/evaluation.py:60: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()
+
+===== WEDA test sau fine-tune =====
+              precision    recall  f1-score   support
+
+    NON_FALL     0.9511    0.9067    0.9284       193
+        FALL     0.7857    0.8800    0.8302        75
+
+    accuracy                         0.8993       268
+   macro avg     0.8684    0.8934    0.8793       268
+weighted avg     0.9048    0.8993    0.9009       268
+
+/home/vinh_shindo/safewatch-fall-detector-edge-ai/src/evaluation/evaluation.py:60: UserWarning: FigureCanvasAgg is non-interactive, and thus cannot be shown
+  plt.show()
+Saved artifact at '/tmp/tmpr3wijo42'. The following endpoints are available:
+
+* Endpoint 'serve'
+  args_0 (POSITIONAL_ONLY): TensorSpec(shape=(None, 20, 4), dtype=tf.float32, name='sensor_window')
+Output Type:
+  TensorSpec(shape=(None, 2), dtype=tf.float32, name=None)
+Captures:
+  129437034812992: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437029904656: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437029903600: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437029904832: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437029905360: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437030289248: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437030289424: TensorSpec(shape=(), dtype=tf.resource, name=None)
+  129437030285728: TensorSpec(shape=(), dtype=tf.resource, name=None)
+/home/vinh_shindo/FuelSentinel-AI/.venv/lib/python3.10/site-packages/tensorflow/lite/python/convert.py:846: UserWarning:Statistics for quantized inputs were expected, but not specified; continuing anyway.
+  warnings.warn(
+W0000 00:00:1789631619.316115   76965 tf_tfl_flatbuffer_helpers.cc:364] Ignored output_format.
+W0000 00:00:1789631619.316147   76965 tf_tfl_flatbuffer_helpers.cc:367] Ignored drop_control_dependency.
+I0000 00:00:1789631619.316404   76965 reader.cc:83] Reading SavedModel from: /tmp/tmpr3wijo42
+I0000 00:00:1789631619.317020   76965 reader.cc:52] Reading meta graph with tags { serve }
+I0000 00:00:1789631619.317051   76965 reader.cc:147] Reading SavedModel debug info (if present) from: /tmp/tmpr3wijo42
+I0000 00:00:1789631619.321722   76965 mlir_graph_optimization_pass.cc:437] MLIR V1 optimization pass is not enabled
+I0000 00:00:1789631619.322568   76965 loader.cc:236] Restoring SavedModel bundle.
+I0000 00:00:1789631619.346927   76965 loader.cc:220] Running initialization op on SavedModel bundle at path: /tmp/tmpr3wijo42
+I0000 00:00:1789631619.354281   76965 loader.cc:471] SavedModel load for tags { serve }; Status: success: OK. Took 37887microseconds.
+I0000 00:00:1789631619.365952   76965 dump_mlir_util.cc:269] disabling MLIR crash reproducer, set env var `MLIR_CRASH_REPRODUCER_DIRECTORY` to enable.
+fully_quantize: 0, inference_type: 6, input_inference_type: INT8, output_inference_type: INT8
+W0000 00:00:1789631619.441361   76965 flatbuffer_export.cc:3851] Skipping runtime version metadata in the model. This will be generated by the exporter.
+Đã tạo: /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/safewatch_person_a_5hz_int8.tflite
+Kích thước: 9.56 KB
+/home/vinh_shindo/FuelSentinel-AI/.venv/lib/python3.10/site-packages/tensorflow/lite/python/interpreter.py:457: UserWarning:     Warning: tf.lite.Interpreter is deprecated and is scheduled for deletion in
+    TF 2.20. Please use the LiteRT interpreter from the ai_edge_litert package.
+    See the [migration guide](https://ai.google.dev/edge/litert/migration)
+    for details.
+    
+  warnings.warn(_INTERPRETER_DELETION_WARNING)
+INFO: Created TensorFlow Lite XNNPACK delegate for CPU.
+===== INPUT =====
+Shape: [ 1 20  4]
+Dtype: <class 'numpy.int8'>
+Quantization: (0.09184257686138153, -23)
+
+===== OUTPUT =====
+Shape: [1 2]
+Dtype: <class 'numpy.int8'>
+Quantization: (0.00390625, -128)
+              precision    recall  f1-score   support
+
+    NON_FALL     0.8276    1.0000    0.9057        24
+        FALL     1.0000    0.5455    0.7059        11
+
+    accuracy                         0.8571        35
+   macro avg     0.9138    0.7727    0.8058        35
+weighted avg     0.8818    0.8571    0.8429        35
+
+Đồng thuận Keras ↔ INT8: 97.14%
+
+FULL INT8: OK
+/home/vinh_shindo/FuelSentinel-AI/.venv/lib/python3.10/site-packages/tensorflow/lite/python/interpreter.py:457: UserWarning:     Warning: tf.lite.Interpreter is deprecated and is scheduled for deletion in
+    TF 2.20. Please use the LiteRT interpreter from the ai_edge_litert package.
+    See the [migration guide](https://ai.google.dev/edge/litert/migration)
+    for details.
+    
+  warnings.warn(_INTERPRETER_DELETION_WARNING)
+===== CẤU HÌNH ESP32-S3 =====
+TARGET_HZ: 5
+SAMPLE_INTERVAL_MS: 200
+WINDOW_SIZE: 20
+FEATURE_COUNT: 4
+Input shape: [ 1 20  4]
+Input dtype: <class 'numpy.int8'>
+Input scale: 0.09184257686138153
+Input zero point: -23
+Output scale: 0.00390625
+Output zero point: -128
+FALL_THRESHOLD: 0.7100000000000003
+HIGH_FALL_THRESHOLD: 0.8600000000000003
+CONSECUTIVE_REQUIRED: 2
+
+CELL 22.5: HOÀN THÀNH
+Đã tạo:
+- /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/fall_model_data.h
+- /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/fall_model_data.cc
+- /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/fall_model_config.h
+- /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/fall_model_config.json
+Đã tạo:
+- /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/fall_inference.h
+- /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/fall_inference.cpp
+Đã tạo: /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/SafeWatch_Fall_Detector.ino
+Đã tạo package: /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/safewatch_person_a_5hz_esp32_package.zip
+Kích thước: 40.44 KB
+Không chạy trong Google Colab — bỏ qua bước tải xuống tự động. File package đã sẵn sàng tại: /home/vinh_shindo/safewatch-fall-detector-edge-ai/outputs/training/20260917_145303_991486/safewatch_person_a_5hz_esp32_package.zip

@@ -26,7 +26,8 @@ def export_int8_tflite(
     seed: int = SEED,
 ):
     """(Cell 21)"""
-    ensure_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    tflite_path = output_dir / "safewatch_person_a_5hz_int8.tflite"
 
     representative_pool = np.concatenate([X_weda_train, X_qmi_train], axis=0).astype(
         np.float32

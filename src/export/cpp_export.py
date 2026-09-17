@@ -110,7 +110,8 @@ def export_cpp_and_config(
     output_dir: Path = OUTPUT_DIR,
 ):
     """(Cell 23) — sinh toàn bộ file model/config cho firmware."""
-    ensure_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    quant = restore_quantization_params(tflite_path)
     input_details = quant["input_details"]
     output_details = quant["output_details"]
     input_scale = quant["input_scale"]

@@ -37,7 +37,8 @@ def write_readme(
     consecutive_required: int,
 ):
     """(Cell 26 — phần README)"""
-    ensure_output_dir()
+    output_dir.mkdir(parents=True, exist_ok=True)
+    readme_path = output_dir / "README_FIRMWARE.md"
 
     readme_path.write_text(
         f"""SAFEWATCH PERSON A — MODEL 5 HZ
