@@ -158,8 +158,9 @@ cd training
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
-# Chuẩn bị data_records.zip (QMI) và để trong /content hoặc đường dẫn bất kỳ
-python safewatch_pipeline.py --qmi-zip /path/to/data_records.zip
+# Dữ liệu đã chuẩn bị tại data/raw/QMI và data/raw/WEDA-FALL/dataset/5Hz
+source /home/vinh_shindo/FuelSentinel-AI/.venv/bin/activate
+cd src && PYTHONPATH=. python3 train.py
 ```
 
 Script sẽ xuất ra:

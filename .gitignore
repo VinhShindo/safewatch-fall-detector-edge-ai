@@ -52,3 +52,11 @@ logs/
 secrets.h
 config.local.h
 appsettings.Development.json
+
+data/*
+!data/readme.md
+!data/01_eda.ipynb
+!data/01_eda_executed.ipynb
+!data/eda/
+!data/eda/**
+!src/config.yaml

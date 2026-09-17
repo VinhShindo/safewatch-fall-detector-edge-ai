@@ -15,36 +15,39 @@ ràng, dùng để:
    TensorFlow Lite Micro.
 
 > **Không thay đổi logic xử lý dữ liệu / huấn luyện / xuất model so
-> với notebook gốc** — chỉ tách các cell thành module, thêm docstring
+`utils/config.py` khai báo:
 > chú thích rõ "Nguồn: Cell X" để dễ đối chiếu ngược lại notebook.
 
 ## Cấu trúc thư mục
 
-```
-safewatch_pipeline/
-├── main.py                          # entry point (python main.py)
-├── requirements.txt
-└── safewatch_pipeline/
-    ├── config.py                    # Cell 5A / 5.5 / 9.5 / 15.5 / 22.5
-    ├── features.py                  # Cell 4, 5, 5A
-    ├── audit.py                     # Cell 8
-    ├── splitting.py                 # Cell 9
-    ├── windowing.py                 # Cell 9.5 / 10
-    ├── normalization.py             # Cell 11
-    ├── augmentation.py              # Cell 12
-    ├── model.py                     # Cell 13
-    ├── train_pretrain.py            # Cell 14
-    ├── evaluation.py                # Cell 15
-    ├── finetune_prep.py             # Cell 15.5 / 16
-    ├── finetune_train.py            # Cell 17 / 18
-    ├── threshold_selection.py       # Cell 19
-    ├── next_day_test.py             # Cell 20 (tùy chọn, mặc định tắt)
-    ├── pipeline.py                  # điều phối toàn bộ (Cell 3 → 26)
-    ├── data_loading/
-    │   ├── prepare_data.py          # Cell 3 (tải/giải nén dữ liệu)
-    │   ├── weda.py                  # Cell 5.5 (load_weda_sessions)
-    │   └── qmi.py                   # Cell 7  (load_qmi_sessions)
-    └── export/
+python train.py
+src/
+├── train.py                         # entry point (python train.py)
+├── pipeline.py                      # điều phối toàn bộ (Cell 3 → 26)
+├── data/                             # nạp dữ liệu, cắt cửa sổ, augmentation
+│   ├── prepare_data.py              # Cell 3 (tải/giải nén dữ liệu)
+│   ├── weda.py                      # Cell 5.5 (load_weda_sessions)
+`utils.config.PACKAGE_PATH`
+│   ├── windowing.py                 # Cell 9.5 / 10
+│   └── augmentation.py              # Cell 12
+├── features/
+│   └── temporal_features.py         # Cell 4, 5, 5A
+├── models/
+│   └── model.py                     # Cell 13
+├── training/
+│   ├── train_pretrain.py            # Cell 14
+from data.prepare_data import prepare_all_data
+from data.weda import load_weda_sessions
+from data.qmi import load_qmi_sessions
+from evaluation.audit import summarize_sessions
+│   ├── evaluation.py                # Cell 15
+│   ├── threshold_selection.py       # Cell 19
+│   └── next_day_test.py             # Cell 20 (tùy chọn)
+├── utils/
+│   ├── config.py                    # Cell 5A / 5.5 / 9.5 / 15.5 / 22.5
+│   ├── splitting.py                 # Cell 9
+│   └── normalization.py             # Cell 11
+└── export/
         ├── tflite_export.py         # Cell 21 (lượng tử hóa INT8)
         ├── tflite_verify.py         # Cell 22 (kiểm tra model INT8)
         ├── cpp_export.py            # Cell 22.5 / 23 (header/config C++)
@@ -63,27 +66,20 @@ pip install -r requirements.txt
 
 ### 2. Chuẩn bị dữ liệu
 
-Notebook gốc (Cell 3) dùng `google.colab.files.upload()` để chọn file
-`data_records.zip` bằng tay trong trình duyệt Colab. Trên máy local
-không có cơ chế này, nên bạn cần tự đặt file vào đúng đường dẫn mà
-`config.py` khai báo:
+Đặt dữ liệu tại các đường dẫn trong `src/config.yaml`:
 
 ```
-/content/data_records.zip
+data/raw/QMI/
+data/raw/WEDA-FALL/dataset/5Hz/
 ```
 
-(Bạn có thể sửa `QMI_ZIP_PATH`, `CONTENT_DIR`, ... trong
-`safewatch_pipeline/config.py` nếu muốn dùng đường dẫn khác trên máy
-mình — đây là những đường dẫn giữ nguyên style `/content/...` như
-notebook gốc, không bắt buộc phải theo Colab.)
-
-Repo `WEDA-FALL` sẽ được tự động `git clone` (giống Cell 3), không cần
-tải tay.
+Có thể tải và merge bằng `python3 src/data/download_merge.py` trước khi
+chạy training.
 
 ### 3. Chạy toàn bộ pipeline
 
 ```bash
-python main.py
+PYTHONPATH=. python3 train.py
 ```
 
 Lệnh này chạy tuần tự đúng như thứ tự Cell 3 → Cell 26 của notebook
@@ -94,10 +90,9 @@ C/C++/Arduino → đóng gói ZIP.
 
 Kết quả (model `.keras`, `.tflite`, các file `.h/.cc/.cpp`, sketch
 `.ino`, README cho firmware, và file `.zip` đóng gói cuối cùng) đều
-nằm trong thư mục cấu hình tại `config.OUTPUT_DIR`
-(mặc định: `/content/safewatch_5hz_output`), và file ZIP tổng hợp tại
-`config.PACKAGE_PATH`
-(mặc định: `/content/safewatch_person_a_5hz_esp32_package.zip`).
+nằm trong thư mục run riêng dưới `outputs/training/<run_id>/`.
+Model, evaluation figures, threshold table và package được lưu trong
+thư mục run tương ứng.
 
 ### 4. Chạy từng bước riêng lẻ (nếu cần)
 
@@ -105,10 +100,10 @@ Mỗi module đều có thể import và gọi độc lập, tương tự chạy
 trong Colab. Ví dụ chỉ muốn nạp dữ liệu và audit:
 
 ```python
-from safewatch_pipeline.data_loading.prepare_data import prepare_all_data
-from safewatch_pipeline.data_loading.weda import load_weda_sessions
-from safewatch_pipeline.data_loading.qmi import load_qmi_sessions
-from safewatch_pipeline.audit import summarize_sessions
+from data.prepare_data import prepare_all_data
+from data.weda import load_weda_sessions
+from data.qmi import load_qmi_sessions
+from evaluation.audit import summarize_sessions
 
 paths = prepare_all_data()
 weda_sessions = load_weda_sessions(paths["weda_5hz_dir"])

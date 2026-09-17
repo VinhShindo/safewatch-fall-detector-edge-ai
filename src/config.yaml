@@ -1,0 +1,29 @@
+paths:
+  qmi_dir: ../data/raw/QMI
+  weda_dir: ../data/raw/WEDA-FALL/dataset/5Hz
+  merge_dir: ../data/raw/merge
+  output_root: ../outputs/training
+  next_day_dir: ../data/raw/QMI_NEXT_DAY
+
+signal:
+  target_hz: 5
+  window_seconds: 4.0
+  feature_count: 4
+  gravity: 9.80665
+
+windowing:
+  inference_stride_samples: 5
+  max_weda_nonfall_windows_train: 4
+  max_weda_nonfall_windows_eval: 2
+  max_qmi_nonfall_windows_train: 2
+  max_qmi_nonfall_windows_eval: 1
+
+fine_tuning:
+  qmi_augment_copies: 5
+  weda_replay_ratio: 0.30
+
+runtime:
+  seed: 42
+  use_gpu: false
+  intra_op_parallelism_threads: 2
+  inter_op_parallelism_threads: 2

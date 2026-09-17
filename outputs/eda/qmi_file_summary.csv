@@ -1,0 +1,10 @@
+file,rows,sessions,labels
+doing.csv,1054,34,Other
+fall_back.csv,434,14,Fall_Back
+fall_front.csv,465,15,Fall_Front
+fall_left.csv,341,11,Fall_Left
+fall_right.csv,434,14,Fall_Right
+jumping.csv,217,7,Standing
+sitting.csv,1054,34,Sitting
+standing.csv,403,13,Standing
+walking.csv,1023,33,Walking
