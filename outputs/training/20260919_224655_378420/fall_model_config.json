@@ -1,0 +1,56 @@
+{
+  "model_name": "safewatch_person_a_5hz_int8",
+  "personalized_for": "PERSON_A",
+  "sample_rate_hz": 5,
+  "sample_interval_ms": 200,
+  "window_seconds": 4.0,
+  "window_size": 20,
+  "inference_stride_samples": 5,
+  "features": [
+    "magnitude_g",
+    "abs_magnitude_minus_1g",
+    "delta_magnitude_g",
+    "acceleration_vector_angle_change_rad",
+    "sma_magnitude_g",
+    "tail_magnitude_variance",
+    "jerk_magnitude_g"
+  ],
+  "feature_mean": [
+    1.2716495990753174,
+    0.3682117760181427,
+    -0.0010419940808787942,
+    0.2451811581850052,
+    1.272754430770874,
+    0.46847817301750183,
+    -0.0009020138531923294
+  ],
+  "feature_std": [
+    0.7953435182571411,
+    0.755502462387085,
+    0.6395136117935181,
+    0.4460706114768982,
+    0.687526285648346,
+    0.9099334478378296,
+    0.9991773366928101
+  ],
+  "input_shape": [
+    1,
+    20,
+    7
+  ],
+  "output_shape": [
+    1,
+    2
+  ],
+  "input_scale": 0.07474615424871445,
+  "input_zero_point": 11,
+  "output_scale": 0.00390625,
+  "output_zero_point": -128,
+  "class_names": [
+    "NON_FALL",
+    "FALL"
+  ],
+  "fall_threshold": 0.6700000000000003,
+  "high_fall_threshold": 0.85,
+  "consecutive_required": 2
+}

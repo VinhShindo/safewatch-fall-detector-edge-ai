@@ -59,7 +59,7 @@ def restore_quantization_params(tflite_path: Path):
 
     if tuple(input_details["shape"]) != (1, WINDOW_SIZE, FEATURE_COUNT):
         raise RuntimeError(
-            "Input model không đúng [1, 20, 4]. "
+            f"Input model không đúng [1, {WINDOW_SIZE}, {FEATURE_COUNT}]. "
             f"Input hiện tại: {input_details['shape']}"
         )
 
@@ -258,6 +258,9 @@ constexpr size_t kTensorArenaSize =
             "abs_magnitude_minus_1g",
             "delta_magnitude_g",
             "acceleration_vector_angle_change_rad",
+            "sma_magnitude_g",
+            "tail_magnitude_variance",
+            "jerk_magnitude_g",
         ],
         "feature_mean": feature_mean.tolist(),
         "feature_std": feature_std.tolist(),

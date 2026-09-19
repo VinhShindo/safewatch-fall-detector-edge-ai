@@ -56,6 +56,9 @@ FEATURES
 2. abs(magnitude_g - 1g)
 3. delta_magnitude_g
 4. acceleration vector angle change
+5. sma_magnitude_g (rolling window 3)
+6. tail_magnitude_variance (last 10 samples)
+7. jerk_magnitude_g
 
 THRESHOLD
 - FALL threshold: {fall_threshold:.4f}

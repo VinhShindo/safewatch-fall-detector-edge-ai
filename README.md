@@ -2,23 +2,7 @@
 
 SafeWatch là hệ thống đồng hồ thông minh phát hiện té ngã theo thời gian thực. Dữ liệu chuyển động được thu từ cảm biến IMU, xử lý trên ESP32-S3 và đưa qua mô hình CNN 1D đã huấn luyện. Khi phát hiện té ngã, thiết bị hiển thị cảnh báo SOS, cho phép người dùng hủy cảnh báo và có thể gửi sự kiện về backend.
 
-> **Trạng thái hiện tại:** pipeline huấn luyện, đánh giá, export TFLite INT8 và sinh mã C/C++/Arduino đã chạy hoàn chỉnh. Kết quả trong báo cáo lấy từ run `outputs/training/20260917_145303_991486`.
-
-## 1. Tên đề tài và mục tiêu
-
-### 1.1. Tên đề tài
-
-**Thiết kế đồng hồ thông minh phát hiện té ngã bằng mô hình học sâu chạy trực tiếp trên thiết bị Edge AI.**
-
-### 1.2. Mục tiêu
-
-- Phát hiện té ngã từ tín hiệu gia tốc trong thời gian gần thực.
-- Thực hiện suy luận trên ESP32-S3, không phụ thuộc cloud để đưa ra quyết định ban đầu.
-- Giảm kích thước mô hình để phù hợp bộ nhớ và năng lực tính toán của thiết bị nhúng.
-- Gửi cảnh báo SOS sau khi xác nhận té ngã.
-- Hạn chế cảnh báo nhầm bằng threshold và yêu cầu nhiều cửa sổ liên tiếp.
-
-## 2. Vấn đề cần giải quyết
+## 1. Vấn đề cần giải quyết
 
 Té ngã thường xảy ra đột ngột và người dùng có thể không thể tự gọi trợ giúp. Hệ thống cần giải quyết đồng thời các vấn đề sau:
 
@@ -29,7 +13,7 @@ Té ngã thường xảy ra đột ngột và người dùng có thể không th
 5. False negative nguy hiểm hơn false positive trong cảnh báo an toàn.
 6. Hệ thống phải tiếp tục hoạt động cục bộ khi mất mạng.
 
-## 3. Giải pháp tổng thể
+## 2. Giải pháp tổng thể
 
 SafeWatch sử dụng hai nguồn dữ liệu:
 
@@ -47,7 +31,7 @@ Chia tập theo user/session
       ↓
 Cắt cửa sổ 4 giây ở 5 Hz
       ↓
-Sinh 4 feature cho mỗi mẫu
+Sinh 7 feature cho mỗi mẫu
       ↓
 Chuẩn hóa mean/std
       ↓
@@ -60,33 +44,33 @@ Threshold + 2 cửa sổ liên tiếp
 Kết quả FALL/NON_FALL và cảnh báo SOS
 ```
 
-## 4. Điểm đặc biệt của dự án
+## 3. Điểm đặc biệt của dự án
 
-### 4.1. Edge AI
+### 3.1. Edge AI
 
 Quyết định phát hiện té ngã được thực hiện trên ESP32-S3. Backend chỉ đảm nhiệm nhận và chuyển tiếp cảnh báo, không nằm trên đường đi bắt buộc của suy luận.
 
-### 4.2. Kết hợp dữ liệu công khai và dữ liệu cá nhân
+### 3.2. Kết hợp dữ liệu công khai và dữ liệu cá nhân
 
 Model học kiến thức tổng quát từ WEDA-FALL, sau đó fine-tune với QMI. QMI được augmentation và trộn thêm một phần WEDA replay để giảm catastrophic forgetting.
 
-### 4.3. Tín hiệu đầu vào nhỏ gọn
+### 3.3. Tín hiệu đầu vào nhỏ gọn
 
 Pipeline hiện dùng bốn đặc trưng gia tốc có ý nghĩa vật lý thay vì đưa toàn bộ raw sensor vào model. Cách này giúp model nhẹ và phù hợp triển khai nhúng.
 
-### 4.4. Xác nhận nhiều cửa sổ
+### 3.4. Xác nhận nhiều cửa sổ
 
 Một cửa sổ có xác suất FALL cao chưa lập tức kích hoạt cảnh báo cuối. Hệ thống yêu cầu hai cửa sổ liên tiếp để giảm cảnh báo nhầm do một peak ngắn.
 
-### 4.5. Quy trình export hoàn chỉnh
+### 3.5. Quy trình export hoàn chỉnh
 
 Pipeline sinh TFLite INT8, mảng byte C/C++, cấu hình inference, wrapper TFLite Micro, sketch Arduino và package triển khai.
 
-## 5. Kiến trúc hệ thống
+## 4. Kiến trúc hệ thống
 
 ![Sơ đồ kiến trúc SafeWatch](docs/S%C6%A1%20%C4%91%E1%BB%93%20ki%E1%BA%BFn%20tr%C3%BAc.png)
 
-### 5.1. Tổng quan luồng xử lý
+### 4.1. Tổng quan luồng xử lý
 
 ```mermaid
 flowchart LR
@@ -96,7 +80,7 @@ flowchart LR
     CLEAN["Validation & preprocessing<br/>unit, resample, finite values"]
     SPLIT["Split<br/>WEDA by user<br/>QMI by session"]
     WINDOW["Windowing<br/>20 samples = 4 seconds"]
-    FEATURES["Feature engineering<br/>4 features/sample"]
+      FEATURES["Feature engineering<br/>7 features/sample"]
     NORM["Normalization<br/>(X - mean) / std"]
     CNN["CNN 1D<br/>Conv1D → Pool → Conv1D"]
     HEAD["Classifier<br/>GAP → Dense → Dropout → Softmax"]
@@ -108,7 +92,7 @@ flowchart LR
     LOAD --> CLEAN --> SPLIT --> WINDOW --> FEATURES --> NORM --> CNN --> HEAD --> DECISION --> RESULT
 ```
 
-### 5.2. Thiết bị và dịch vụ
+### 4.2. Thiết bị và dịch vụ
 
 ```mermaid
 flowchart TB
@@ -130,11 +114,11 @@ flowchart TB
     TELEGRAM --> FAMILY["Người thân / giám sát"]
 ```
 
-## 6. Kiến trúc CNN 1D cuối cùng
+## 5. Kiến trúc CNN 1D cuối cùng
 
 Pipeline hiện tại **không sử dụng CNN-GRU, BiGRU hoặc nhánh MLP 21 đặc trưng**. Kiến trúc thực tế trong `src/models/model.py` là CNN 1D nhẹ, được chọn để phù hợp ESP32-S3.
 
-### 6.1. Các thành phần chính
+### 5.1. Các thành phần chính
 
 1. **Input Layer:** nhận tensor cửa sổ cảm biến.
 2. **Conv1D Encoder:** học pattern cục bộ theo thời gian.
@@ -145,7 +129,7 @@ Pipeline hiện tại **không sử dụng CNN-GRU, BiGRU hoặc nhánh MLP 21 �
 
 ![Kiến trúc CNN 1D](docs/S%C6%A1%20%C4%91%E1%BB%93%20ki%E1%BA%BFn%20tr%C3%BAc.png)
 
-### 6.2. Input Layer và tiền xử lý
+### 5.2. Input Layer và tiền xử lý
 
 Mỗi mẫu đầu vào của model là:
 
@@ -163,7 +147,7 @@ $$
 
 QMI được đổi từ $m/s^2$ sang $g$ và resample từ khoảng 6.25 Hz xuống 5 Hz. WEDA được tự nhận diện đơn vị rồi đưa về cùng hệ $g$.
 
-### 6.3. Feature Engineering
+### 5.3. Feature Engineering
 
 Với mỗi mẫu gia tốc, pipeline tạo bốn feature:
 
@@ -197,7 +181,7 @@ $$
 \mathbf{X}_{feat} \in \mathbb{R}^{20 \times 4}
 $$
 
-### 6.4. Chuẩn hóa
+### 5.4. Chuẩn hóa
 
 Mean và standard deviation được tính từ dữ liệu train của hai domain, với trọng số cân bằng giữa WEDA và QMI:
 
@@ -207,11 +191,11 @@ $$
 
 Trong đó $\boldsymbol{\mu} \in \mathbb{R}^{4}$ và $\boldsymbol{\sigma} \in \mathbb{R}^{4}$.
 
-### 6.5. CNN Encoder
+### 5.5. CNN Encoder
 
 | Layer | Cấu hình | Output shape |
 |---|---|---|
-| Input | 20 samples × 4 features | `(B, 20, 4)` |
+| Input | 20 samples × 7 features | `(B, 20, 7)` |
 | Conv1D `conv1` | 16 filters, kernel 3, same, ReLU | `(B, 20, 16)` |
 | MaxPooling1D `pool1` | pool size 2 | `(B, 10, 16)` |
 | Conv1D `conv2` | 24 filters, kernel 3, same, ReLU | `(B, 10, 24)` |
@@ -220,13 +204,16 @@ Trong đó $\boldsymbol{\mu} \in \mathbb{R}^{4}$ và $\boldsymbol{\sigma} \in \m
 | Dropout | rate 0.20 | `(B, 16)` |
 | Dense classifier | 2 units, Softmax | `(B, 2)` |
 
-Phép tích chập một chiều tổng quát:
+Với $C_{in}$ kênh đầu vào, $C_{out}$ bộ lọc, kernel $k=3$ và padding `same`, phép tích chập một chiều được mô tả bởi:
 
 $$
-h_{t,c}^{(l)} = \operatorname{ReLU}\left(b_c^{(l)} + \sum_i\sum_k W_{c,i,k}^{(l)} h_{t+k,i}^{(l-1)}\right)
+h_{t,c}^{(l)} = \operatorname{ReLU}\left(b_c^{(l)} + \sum_{i=1}^{C_{in}} \sum_{r=-1}^{1} W_{c,i,r}^{(l)} h_{t+r,i}^{(l-1)}\right),
+\quad c=1,\ldots,C_{out}
 $$
 
-### 6.6. Classification Head
+Trong đó $h_{t+r,i}^{(l-1)}$ được đệm ở biên để giữ nguyên chiều thời gian $T$. Vì vậy, `conv1` biến $(B,20,4)$ thành $(B,20,16)$ và `conv2` biến $(B,10,16)$ thành $(B,10,24)$.
+
+### 5.6. Classification Head
 
 Đầu ra Dense cuối cùng tạo hai logit $z_0, z_1$. Softmax chuyển chúng thành xác suất:
 
@@ -247,7 +234,7 @@ $$
 p_{fall} = P(y=FALL \mid \mathbf{X}) = output[:,1]
 $$
 
-### 6.7. Quyết định cảnh báo
+### 5.7. Quyết định cảnh báo
 
 Thông số của run hiện tại:
 
@@ -267,34 +254,34 @@ Tăng bộ đếm cửa sổ té ngã
 Xác nhận FALL và kích hoạt SOS
 ```
 
-## 7. Quy trình huấn luyện và đánh giá
+## 6. Quy trình huấn luyện và đánh giá
 
-### 7.1. Chuẩn bị dữ liệu
+### 6.1. Chuẩn bị dữ liệu
 
 | Dataset | CSV | Session hợp lệ | Ghi chú |
 |---|---:|---:|---|
 | WEDA-FALL 5 Hz | 969 | 962 | 612 NON_FALL, 350 FALL |
 | QMI | 9 | 175 | 121 NON_FALL, 54 FALL |
 
-### 7.2. Chia dữ liệu
+### 6.2. Chia dữ liệu
 
 - WEDA chia theo **user** để tránh rò rỉ giữa các session của cùng người.
 - QMI chia theo **session**.
 - WEDA: 644 train, 146 validation, 172 test session.
 - QMI: 140 train, 35 validation session.
 
-### 7.3. Fine-tuning
+### 6.3. Fine-tuning
 
-Tập fine-tune có kích thước `(2520, 20, 4)`, gồm QMI augmentation và WEDA replay. Class weight:
+Tập fine-tune gồm các cửa sổ kích thước `(20, 7)`, sau đó được mở rộng bằng QMI augmentation, mixup và WEDA replay. Class weight:
 
 ```text
 NON_FALL: 0.7464
 FALL:     1.5144
 ```
 
-## 8. Kết quả thực nghiệm
+## 7. Kết quả thực nghiệm
 
-### 8.1. Kết quả theo dataset
+### 7.1. Kết quả theo dataset
 
 | Giai đoạn | Accuracy | Precision FALL | Recall FALL | F1 FALL |
 |---|---:|---:|---:|---:|
@@ -303,37 +290,83 @@ FALL:     1.5144
 | QMI validation | 88.57% | 100.00% | 63.64% | 77.78% |
 | TFLite INT8 trên QMI | 85.71% | 100.00% | 54.55% | 70.59% |
 
-### 8.2. Diễn giải
+### 7.2. Ma trận nhầm lẫn
+
+Các ảnh dưới đây được sinh trực tiếp từ run `20260917_145303_991486`. Quy ước hàng là nhãn thật, cột là nhãn dự đoán; thứ tự lớp là `NON_FALL`, `FALL`.
+
+#### WEDA sau pretrain
+
+![Confusion matrix WEDA sau pretrain](outputs/training/20260917_145303_991486/weda_test_sau_pretrain_confusion_matrix.png)
+
+| Tập WEDA test | Dự đoán NON_FALL | Dự đoán FALL |
+|---|---:|---:|
+| Thật NON_FALL | TN = 180 | FP = 13 |
+| Thật FALL | FN = 10 | TP = 65 |
+
+Model bỏ sót 10/75 mẫu FALL, tương ứng recall FALL 86.67%. Có 13 mẫu NON_FALL bị cảnh báo nhầm.
+
+#### WEDA sau fine-tune
+
+![Confusion matrix WEDA sau fine-tune](outputs/training/20260917_145303_991486/weda_test_sau_fine-tune_confusion_matrix.png)
+
+| Tập WEDA test | Dự đoán NON_FALL | Dự đoán FALL |
+|---|---:|---:|
+| Thật NON_FALL | TN = 175 | FP = 18 |
+| Thật FALL | FN = 9 | TP = 66 |
+
+Sau fine-tune, recall FALL tăng nhẹ lên 88.00%, nhưng số false positive tăng từ 13 lên 18. Điều này cho thấy model nhạy hơn với FALL nhưng đánh đổi một phần precision.
+
+#### QMI validation với model Keras
+
+![Confusion matrix QMI validation](outputs/training/20260917_145303_991486/qmi_person_a_session_validation_confusion_matrix.png)
+
+| Tập QMI validation | Dự đoán NON_FALL | Dự đoán FALL |
+|---|---:|---:|
+| Thật NON_FALL | TN = 24 | FP = 0 |
+| Thật FALL | FN = 4 | TP = 7 |
+
+QMI validation không có false positive nhưng bỏ sót 4/11 session FALL. Đây là lý do recall chỉ đạt 63.64%. Vì validation chỉ có 11 FALL session, mỗi session bị bỏ sót làm recall thay đổi khoảng 9.09 điểm phần trăm.
+
+#### So sánh Keras và TFLite INT8
+
+| Model | TN | FP | FN | TP | Recall FALL |
+|---|---:|---:|---:|---:|---:|
+| Keras QMI validation | 24 | 0 | 4 | 7 | 63.64% |
+| TFLite INT8 QMI validation | 24 | 0 | 5 | 6 | 54.55% |
+
+INT8 giữ được cấu trúc và hành vi tổng thể gần model Keras, nhưng làm giảm thêm một mẫu FALL được phát hiện. Vì đây là bài toán an toàn, cần hiệu chỉnh threshold trực tiếp trên output INT8 trước khi triển khai thực địa.
+
+### 7.3. Diễn giải
 
 Model học tốt trên WEDA, nhưng recall trên QMI còn thấp. Trong 11 session FALL của QMI validation, model float phát hiện đúng khoảng 7 session và bỏ sót khoảng 4 session. Sau chuyển sang INT8, recall giảm thêm.
 
 Kết quả cho thấy domain gap giữa WEDA và QMI vẫn đáng kể. Model có precision cao nhưng chưa đủ nhạy cho bài toán an toàn, trong đó false negative cần được ưu tiên giảm.
 
-### 8.3. Kiểm tra INT8
+### 7.4. Kiểm tra INT8
 
 ```text
-Input shape:  [1, 20, 4]
+Input shape:  [1, 20, 7]
 Input dtype:  int8
 Output shape: [1, 2]
 Output dtype: int8
 Keras ↔ INT8 agreement: 97.14%
 ```
 
-## 9. Sản phẩm thử nghiệm
+## 8. Sản phẩm thử nghiệm
 
-### 9.1. Màn hình hoạt động bình thường
+### 8.1. Màn hình hoạt động bình thường
 
 Thiết bị hiển thị thời gian, pin, nhịp tim và trạng thái bình thường.
 
 ![Màn hình hoạt động bình thường](docs/M%C3%A0n%20h%C3%ACnh%20b%C3%ACnh%20th%C6%B0%E1%BB%9Dng.jpg)
 
-### 9.2. Màn hình cảnh báo SOS
+### 8.2. Màn hình cảnh báo SOS
 
 Sau khi xác nhận té ngã, thiết bị hiển thị màn hình SOS màu đỏ và cho phép người dùng chạm để hủy cảnh báo nếu phát hiện nhầm.
 
 ![Cảnh báo SOS](docs/C%E1%BA%A3nh%20b%C3%A1o%20SOS.jpg)
 
-## 10. Phần cứng và triển khai
+## 9. Phần cứng và triển khai
 
 | Thành phần | Linh kiện | Vai trò |
 |---|---|---|
@@ -357,7 +390,7 @@ fall_inference.cpp
 SafeWatch_Fall_Detector.ino
 ```
 
-## 11. Cấu trúc repository
+## 10. Cấu trúc repository
 
 ```text
 .
@@ -382,7 +415,7 @@ SafeWatch_Fall_Detector.ino
 └── src/requirements.txt
 ```
 
-## 12. Cài đặt và chạy
+## 11. Cài đặt và chạy
 
 ```bash
 cd /home/vinh_shindo/safewatch-fall-detector-edge-ai
@@ -421,7 +454,7 @@ Mỗi lần chạy tạo một thư mục riêng tại `outputs/training/<run_id
 SAFEWATCH_RUN_ID=experiment_01 PYTHONPATH=. python3 train.py
 ```
 
-## 13. Cấu hình
+## 12. Cấu hình
 
 Các đường dẫn và tham số nằm trong [src/config.yaml](src/config.yaml), gồm dataset, sampling rate, windowing, augmentation, replay ratio, seed và cấu hình CPU/GPU.
 
@@ -434,7 +467,7 @@ runtime:
   inter_op_parallelism_threads: 2
 ```
 
-## 14. Hạn chế và hướng cải thiện
+## 13. Hạn chế và hướng cải thiện
 
 - QMI validation chỉ có 35 session, trong đó 11 session FALL.
 - Recall FALL trên QMI còn thấp: 63.64% với Keras và 54.55% với INT8.
@@ -452,12 +485,12 @@ Hướng cải thiện:
 6. Đánh giá riêng theo `Fall_Back`, `Fall_Front`, `Fall_Left`, `Fall_Right`.
 7. Thêm smoothing xác suất và đánh giá theo sự kiện thay vì chỉ theo window.
 
-## 15. Kết luận
+## 14. Kết luận
 
 SafeWatch đã hình thành pipeline Edge AI hoàn chỉnh từ dữ liệu cảm biến đến sản phẩm thử nghiệm. Mô hình CNN 1D có kích thước nhỏ, input rõ ràng và đã được chuyển thành TFLite INT8 cùng mã triển khai ESP32.
 
 Kết quả WEDA cho thấy mô hình phân biệt té ngã tốt ở domain công khai. Tuy nhiên, kết quả QMI cho thấy cần bổ sung dữ liệu cá nhân và hiệu chỉnh threshold để đạt độ nhạy phù hợp với ứng dụng an toàn trước khi đánh giá thực địa quy mô lớn.
 
-## 16. License
+## 15. License
 
 Dự án phát hành theo giấy phép MIT. Xem [LICENSE](LICENSE).

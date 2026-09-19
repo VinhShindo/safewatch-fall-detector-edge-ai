@@ -34,7 +34,7 @@ def finetune_stage1(
         else:
             layer.trainable = True
 
-    compile_model(model, learning_rate=1e-4)
+    compile_model(model, learning_rate=5e-5)
 
     history_finetune_stage1 = model.fit(
         X_finetune,
@@ -45,7 +45,7 @@ def finetune_stage1(
         class_weight=finetune_class_weights,
         callbacks=[
             tf.keras.callbacks.EarlyStopping(
-                monitor="val_loss", patience=6, restore_best_weights=True, verbose=1
+                monitor="val_loss", patience=10, restore_best_weights=True, verbose=1
             ),
             tf.keras.callbacks.ReduceLROnPlateau(
                 monitor="val_loss", factor=0.5, patience=3, min_lr=1e-6, verbose=1
@@ -76,7 +76,7 @@ def finetune_stage2(
     for layer in model.layers:
         layer.trainable = layer.name != "conv1"
 
-    compile_model(model, learning_rate=1e-5)
+    compile_model(model, learning_rate=1e-4)
 
     history_finetune_stage2 = model.fit(
         X_finetune,

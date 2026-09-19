@@ -198,6 +198,27 @@ bool RunFallInference(
 
     int tensor_index = 0;
 
+    float magnitudes[kWindowSize] = {};
+    for (int sample = 0; sample < kWindowSize; ++sample) {
+        const float x = accel_window_g[sample][0];
+        const float y = accel_window_g[sample][1];
+        const float z = accel_window_g[sample][2];
+        magnitudes[sample] = std::sqrt(x * x + y * y + z * z);
+    }
+
+    const int tail_start = (kWindowSize > 10) ? kWindowSize - 10 : 0;
+    float tail_mean = 0.0f;
+    for (int sample = tail_start; sample < kWindowSize; ++sample) {
+        tail_mean += magnitudes[sample];
+    }
+    tail_mean /= static_cast<float>(kWindowSize - tail_start);
+    float tail_variance = 0.0f;
+    for (int sample = tail_start; sample < kWindowSize; ++sample) {
+        const float difference = magnitudes[sample] - tail_mean;
+        tail_variance += difference * difference;
+    }
+    tail_variance /= static_cast<float>(kWindowSize - tail_start);
+
     float previous_x =
         accel_window_g[0][0];
 
@@ -228,12 +249,7 @@ bool RunFallInference(
         const float z =
             accel_window_g[sample][2];
 
-        const float magnitude =
-            std::sqrt(
-                x * x
-                + y * y
-                + z * z
-            );
+        const float magnitude = magnitudes[sample];
 
         const float deviation =
             std::fabs(
@@ -242,11 +258,18 @@ bool RunFallInference(
 
         float delta_magnitude = 0.0f;
         float angle_change = 0.0f;
+        float jerk_magnitude = 0.0f;
 
         if (sample > 0) {
             delta_magnitude =
                 magnitude
                 - previous_magnitude;
+
+            if (sample > 1) {
+                const float previous_delta =
+                    previous_magnitude - magnitudes[sample - 2];
+                jerk_magnitude = delta_magnitude - previous_delta;
+            }
 
             const float denominator =
                 std::fmax(
@@ -272,12 +295,22 @@ bool RunFallInference(
                 std::acos(cosine);
         }
 
+        const int sma_start = (sample > 2) ? sample - 2 : 0;
+        float sma_magnitude = 0.0f;
+        for (int index = sma_start; index <= sample; ++index) {
+            sma_magnitude += magnitudes[index];
+        }
+        sma_magnitude /= static_cast<float>(sample - sma_start + 1);
+
         const float
             features[kFeatureCount] = {
                 magnitude,
                 deviation,
                 delta_magnitude,
-                angle_change
+                angle_change,
+                sma_magnitude,
+                tail_variance,
+                jerk_magnitude
             };
 
         for (

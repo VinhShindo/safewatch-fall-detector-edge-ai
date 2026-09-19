@@ -3,7 +3,7 @@
 features.py
 ============
 Đọc file CSV gia tốc, chuẩn hóa đơn vị, resample về TARGET_HZ và
-sinh ra 4 feature dùng cho model.
+sinh ra 7 feature dùng cho model.
 
 Nguồn gốc trong notebook Colab:
 - Cell 4 / Cell 5 (hai cell trùng nội dung nhau trong notebook gốc):
@@ -285,7 +285,7 @@ def resample_accel(timestamps_ms, accel, target_hz=TARGET_HZ):
 
 def raw_accel_to_features(accel_g):
     """
-    Chuyển ax, ay, az thành 4 feature. (Cell 5A)
+    Chuyển ax, ay, az thành 7 feature. (Cell 5A)
 
     Input:
         accel_g shape (N, 3), đơn vị g
@@ -298,6 +298,9 @@ def raw_accel_to_features(accel_g):
         1. abs(magnitude_g - 1g)
         2. delta_magnitude_g
         3. angle_change_rad
+        4. sma_magnitude_g (rolling window 3)
+        5. tail_magnitude_variance (variance of last 10 samples)
+        6. jerk_magnitude_g (delta of delta magnitude)
     """
     accel_g = np.asarray(accel_g, dtype=np.float32)
 
@@ -339,8 +342,33 @@ def raw_accel_to_features(accel_g):
 
         angle_change[1:] = np.arccos(cosine_values)
 
+    # Short rolling SMA captures the local impact envelope without adding
+    # another learned branch to the model.
+    sma_magnitude = np.empty(len(accel_g), dtype=np.float32)
+    for index in range(len(accel_g)):
+        start = max(0, index - 2)
+        sma_magnitude[index] = magnitude[start : index + 1].mean()
+
+    tail_start = max(0, len(magnitude) - 10)
+    tail_variance = float(np.var(magnitude[tail_start:]))
+    tail_magnitude_variance = np.full(
+        len(accel_g), tail_variance, dtype=np.float32
+    )
+
+    jerk_magnitude = np.zeros(len(accel_g), dtype=np.float32)
+    if len(accel_g) > 2:
+        jerk_magnitude[2:] = np.diff(magnitude, n=2)
+
     features = np.column_stack(
-        [magnitude, deviation_from_gravity, delta_magnitude, angle_change]
+        [
+            magnitude,
+            deviation_from_gravity,
+            delta_magnitude,
+            angle_change,
+            sma_magnitude,
+            tail_magnitude_variance,
+            jerk_magnitude,
+        ]
     )
     features = features.astype(np.float32)
 

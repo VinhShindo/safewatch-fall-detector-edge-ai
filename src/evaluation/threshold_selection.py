@@ -23,7 +23,7 @@ def select_fall_threshold(model, X_qmi_validation, y_qmi_validation):
 
     threshold_results = []
 
-    for threshold in np.arange(0.35, 0.96, 0.01):
+    for threshold in np.arange(0.40, 0.96, 0.01):   # 0.20 → 0.40
         predictions = (qmi_validation_probabilities >= threshold).astype(np.int64)
 
         threshold_results.append(

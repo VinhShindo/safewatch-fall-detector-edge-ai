@@ -8,7 +8,7 @@ paths:
 signal:
   target_hz: 5
   window_seconds: 4.0
-  feature_count: 4
+  feature_count: 7
   gravity: 9.80665
 
 windowing:
@@ -19,8 +19,8 @@ windowing:
   max_qmi_nonfall_windows_eval: 1
 
 fine_tuning:
-  qmi_augment_copies: 5
-  weda_replay_ratio: 0.30
+  qmi_augment_copies: 2          # 5 → 2
+  weda_replay_ratio: 0.50        # 0.30 → 0.50
 
 runtime:
   seed: 42
