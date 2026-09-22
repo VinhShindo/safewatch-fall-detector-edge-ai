@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Thêm thiết bị | {% endblock %}
+{% block content %}
+<div class="page-heading">
+  <span><h1>Thêm thiết bị &amp; bệnh nhân</h1><p>Đăng ký Device ID của ESP32-S3 và thông tin người đeo. Dữ liệu được lưu vào file JSON.</p></span>
+  <a class="btn-outline-sw" href="/devices"><i class="bi bi-arrow-left"></i>Quay lại</a>
+</div>
+<section class="section-card device-create-card">
+  <form id="deviceForm" class="device-create-form" novalidate>
+    <div class="form-error" id="deviceFormError" role="alert"></div>
+    <div class="form-grid">
+      <label>Device ID ESP32-S3<input name="id" required placeholder="SW-ESP32-001"><small>Phải trùng với Device ID trong firmware.</small></label>
+      <label>Tên bệnh nhân<input name="patientName" required placeholder="Nguyễn Văn A"></label>
+      <label>Năm sinh<input name="birthYear" type="number" min="1900" max="2100" value="1950"></label>
+      <label>Cơ sở<select name="facilityId">{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></label>
+      <label>Phòng<input name="roomId" required placeholder="Nhập mã phòng"></label>
+      <label>Pin ban đầu<input name="battery" type="number" min="0" max="100" value="100"></label>
+      <label>Tên người thân<input name="contactName" required placeholder="Nguyễn Thị B"></label>
+      <label>Mối quan hệ<input name="contactRelation" placeholder="Ví dụ: Con gái"></label>
+      <label>Số điện thoại người thân<input name="contactPhone" required type="tel" placeholder="0901234567"></label>
+      <label>Bác sĩ phụ trách<input name="doctorName" required placeholder="BS. Trần Văn C"></label>
+      <label>Số điện thoại bác sĩ<input name="doctorPhone" type="tel" placeholder="0900000000"></label>
+    </div>
+    <div class="device-create-actions">
+      <a class="btn-outline-sw" href="/devices">Hủy</a>
+      <button type="submit" class="btn-primary-sw"><i class="bi bi-save"></i>Lưu thiết bị</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/js/device-create.js?v={{ asset_v }}"></script>{% endblock %}

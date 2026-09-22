@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Đăng nhập | SafeWatch Admin</title>
+  <link rel="stylesheet" href="/static/css/site.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/monitoring.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="/static/css/monitoring-overrides.css?v={{ asset_v }}">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+</head>
+<body class="login-page">
+  <main class="login-card">
+    <a class="brand login-brand" href="/"><span class="brand-mark"><i class="bi bi-heart-pulse-fill"></i></span><span class="brand-copy"><strong>SafeWatch <em>Admin</em></strong><small>Nền tảng quản lý đồng hồ an toàn</small></span></a>
+    <h1>Đăng nhập quản trị</h1>
+    <p class="login-subtitle">Đăng nhập để theo dõi thiết bị, cảnh báo và hồ sơ người dùng.</p>
+    <form method="post" action="/account/login">
+      <input type="hidden" name="return_url" value="{{ return_url }}">
+      {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+      <label>Tên đăng nhập<input name="username" value="{{ username }}" autocomplete="username" required autofocus></label>
+      <label>Mật khẩu<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn-primary-sw" type="submit"><i class="bi bi-box-arrow-in-right"></i>Đăng nhập</button>
+    </form>
+  </main>
+</body>
+</html>

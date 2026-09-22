@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Quản lý cơ sở | {% endblock %}
+{% block content %}
+<div class="page-heading"><span><h1>Quản lý cơ sở</h1><p>Quản lý thông tin cơ sở và đội ngũ nhân viên y tế.</p></span><button class="btn-primary-sw" id="addFacility"><i class="bi bi-building-add"></i>Thêm cơ sở</button></div>
+<div class="facility-management" id="facilityManagement"><div class="empty-state">Đang tải cơ sở...</div></div>
+<dialog class="sw-dialog" id="facilityDialog"><form method="dialog" id="facilityForm"><h2>Thêm cơ sở</h2><label>Tên cơ sở<input name="name" required></label><label>Địa chỉ<input name="address"></label><label>Số điện thoại<input name="phone" type="tel"></label><div><button type="button" class="btn-outline-sw" data-close>Hủy</button><button type="submit" class="btn-primary-sw">Lưu cơ sở</button></div></form></dialog>
+<dialog class="sw-dialog" id="staffDialog"><form method="dialog" id="staffForm"><h2>Thêm nhân viên y tế</h2><input type="hidden" name="facilityId"><label>Họ tên<input name="fullName" required></label><label>Vai trò<input name="role" placeholder="Điều dưỡng"></label><label>Số điện thoại<input name="phone" type="tel"></label><label>Email<input name="email" type="email"></label><div class="staff-shifts"><label>Ca bắt đầu<input name="shiftStart" value="07:00"></label><label>Ca kết thúc<input name="shiftEnd" value="19:00"></label></div><div><button type="button" class="btn-outline-sw" data-close>Hủy</button><button type="submit" class="btn-primary-sw">Lưu nhân viên</button></div></form></dialog>
+{% endblock %}
+{% block scripts %}<script src="/static/js/facilities.js?v={{ asset_v }}"></script>{% endblock %}

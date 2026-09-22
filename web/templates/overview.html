@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Tổng quan | {% endblock %}
+{% block content %}
+<div class="page-heading"><h1 class="visually-hidden">Tổng quan SafeWatch</h1></div>
+<div class="metrics-grid" id="overviewMetrics">
+  <div class="metric-card placeholder-glow"><span class="placeholder col-12 h-100"></span></div>
+  <div class="metric-card placeholder-glow"><span class="placeholder col-12 h-100"></span></div>
+  <div class="metric-card placeholder-glow"><span class="placeholder col-12 h-100"></span></div>
+  <div class="metric-card placeholder-glow"><span class="placeholder col-12 h-100"></span></div>
+</div>
+<div class="dashboard-grid">
+  <section class="section-card trend-card">
+    <div class="card-heading"><h2>Cảnh báo theo ngày <span>(7 ngày gần nhất)</span></h2><select class="filter-control compact" aria-label="Khoảng thời gian"><option>7 ngày qua</option></select></div>
+    <div class="trend-chart-wrap"><canvas id="alertsTrendChart"></canvas></div>
+  </section>
+  <section class="section-card device-state-card">
+    <div class="card-heading"><h2>Trạng thái thiết bị</h2></div>
+    <div class="state-chart-content">
+      <div class="donut-wrap"><canvas id="deviceStatusChart"></canvas><div class="donut-center"><small>Tổng số</small><strong id="deviceTotal">0</strong></div></div>
+      <div class="chart-legend" id="deviceLegend"></div>
+    </div>
+  </section>
+  <section class="section-card latest-alerts-card">
+    <div class="card-heading"><h2>Cảnh báo mới nhất</h2><a href="/alerts">Xem tất cả</a></div>
+    <div class="latest-alerts-list" id="latestAlerts"></div>
+    <a class="show-all-alerts" href="/alerts">Xem tất cả cảnh báo <i class="bi bi-chevron-right"></i></a>
+  </section>
+  <section class="section-card live-monitoring-card">
+    <div class="card-heading"><h2>Giám sát trực tiếp</h2><a class="btn-outline-sw small" href="/devices">Xem tất cả thiết bị <i class="bi bi-arrow-up-right"></i></a></div>
+    <div class="table-responsive">
+      <table class="table sw-table mb-0">
+        <thead><tr><th>Mã đồng hồ</th><th>Người đeo</th><th>Trạng thái</th><th>Pin</th><th>Nhịp tim</th><th>Kết nối</th><th>Cập nhật lần cuối</th></tr></thead>
+        <tbody id="liveDevices"></tbody>
+      </table>
+    </div>
+    <div class="table-footnote" id="liveSummary"></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/overview.js?v={{ asset_v }}"></script>{% endblock %}

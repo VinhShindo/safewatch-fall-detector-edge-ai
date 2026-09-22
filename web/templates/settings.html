@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Cài đặt | {% endblock %}
+{% block content %}
+<div class="page-heading"><h1>Cài đặt hệ thống</h1></div>
+<section class="section-card settings-card">
+  <h2>Telegram Bot API</h2>
+  <p>Thông tin được lưu vào cấu hình máy chủ. Token không được hiển thị lại trên giao diện.</p>
+  <form id="telegramConfigForm" class="telegram-config-form"><label><input type="checkbox" name="enabled"> Bật gửi thông báo Telegram</label><label>Bot token<input name="botToken" type="password" autocomplete="off" placeholder="Nhập bot token mới"></label><label>Chat ID<input name="chatId" placeholder="Nhập Chat ID"></label><button type="submit" class="btn-outline-sw"><i class="bi bi-save"></i>Lưu cấu hình</button></form>
+  <div id="telegramStatus">Đang kiểm tra cấu hình...</div>
+  <button id="testTelegram" class="btn-primary-sw"><i class="bi bi-send"></i>Gửi kiểm tra Telegram</button>
+</section>
+<section class="section-card settings-card telegram-history">
+  <div class="card-heading"><h2>Đoạn chat Telegram</h2><button id="refreshTelegramMessages" class="btn-outline-sw small"><i class="bi bi-arrow-repeat"></i>Làm mới</button></div>
+  <p class="form-help">Hiển thị các tin nhắn bot nhận được từ Telegram để xác định Chat ID và theo dõi trao đổi.</p>
+  <div id="telegramMessages" class="telegram-messages"><div class="empty-state">Đang tải tin nhắn...</div></div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="/static/js/settings.js?v={{ asset_v }}"></script>{% endblock %}

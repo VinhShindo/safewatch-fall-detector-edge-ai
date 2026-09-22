@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Hồ sơ người dùng | {% endblock %}
+{% block content %}
+<div class="page-heading"><h1>Hồ sơ người dùng</h1><button class="btn-primary-sw" id="addPatient"><i class="bi bi-person-plus"></i>Thêm bệnh nhân</button></div>
+<div class="user-filter-row">
+  <form class="user-search" id="userSearch"><input placeholder="Tìm kiếm theo tên, mã đồng hồ..." id="userSearchText"><button><i class="bi bi-search"></i></button></form>
+  <select class="filter-control" id="userFacility"><option value="all">Khu vực: Tất cả</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select>
+  <select class="filter-control" id="userStatus"><option value="all">Trạng thái: Tất cả</option><option value="active">Đang theo dõi</option></select>
+</div>
+<div id="userProfile"><div class="empty-state">Đang tải hồ sơ...</div></div>
+
+<dialog class="sw-dialog patient-dialog" id="patientDialog">
+  <form method="dialog" id="patientForm">
+    <h2>Thêm bệnh nhân</h2>
+    <p class="form-help">Mã đồng hồ là Device ID đã nạp trong firmware ESP32-S3, không phải URL API.</p>
+    <div class="form-grid">
+      <label>Họ và tên bệnh nhân<input name="fullName" required placeholder="Nguyễn Văn A"></label>
+      <label>Giới tính<select name="gender"><option value="Nam">Nam</option><option value="Nữ">Nữ</option></select></label>
+      <label>Năm sinh<input name="birthYear" type="number" min="1900" max="2100" value="1948"></label>
+      <label>Mã đồng hồ / Device ID<input name="deviceId" required placeholder="SW-ESP32-001"></label>
+      <label>Cơ sở<select name="facilityId">{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></label>
+      <label>Mã phòng<input name="roomId" required placeholder="Nhập mã phòng"></label>
+      <label>Tên người thân<input name="contactName" required placeholder="Nguyễn Thị B"></label>
+      <label>Mối quan hệ<input name="contactRelation" placeholder="Ví dụ: Con gái"></label>
+      <label>Số điện thoại người thân<input name="contactPhone" required type="tel" placeholder="0901234567"></label>
+      <label>Email người thân<input name="contactEmail" type="email" placeholder="family@example.com"></label>
+      <label>Người phụ trách<select name="staffId" id="patientStaff"><option value="">Đang tải...</option></select></label>
+    </div>
+    <div><button type="button" value="cancel" class="btn-outline-sw" data-close>Hủy</button><button class="btn-primary-sw" type="submit">Lưu bệnh nhân</button></div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="/static/js/users.js?v={{ asset_v }}"></script>{% endblock %}

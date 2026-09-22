@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Quản lý thiết bị | {% endblock %}
+{% block content %}
+<div class="page-heading">
+  <h1>Quản lý thiết bị</h1>
+  <a href="/devices/create" class="btn-primary-sw"><i class="bi bi-plus-lg"></i>Thêm thiết bị</a>
+</div>
+<div class="alert alert-success d-none" role="alert" id="deviceCreatedNotice"></div>
+<div class="filter-row">
+  <select class="filter-control" id="deviceStatus"><option value="all">Tất cả trạng thái</option><option value="active">Đang hoạt động</option><option value="low_battery">Pin yếu</option><option value="offline">Mất kết nối</option></select>
+  <select class="filter-control" id="deviceFacility"><option value="all">Khu vực</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select>
+  <select class="filter-control" id="deviceBattery"><option value="all">Mức pin</option><option value="low">Dưới 20%</option><option value="normal">Trên 20%</option></select>
+  <button class="btn-outline-sw" id="resetDeviceFilters"><i class="bi bi-arrow-counterclockwise"></i>Xóa bộ lọc</button>
+</div>
+<div class="metrics-grid compact-metrics" id="deviceMetrics"></div>
+<div class="devices-layout">
+  <section class="section-card device-table-card">
+    <div class="table-responsive">
+      <table class="table sw-table mb-0">
+        <thead><tr><th></th><th>Mã thiết bị</th><th>Người đeo</th><th>Khu vực</th><th>Trạng thái</th><th>Pin</th><th>Nhịp tim</th><th>Cập nhật cuối</th><th>Thao tác</th></tr></thead>
+        <tbody id="devicesTable"></tbody>
+      </table>
+    </div>
+    <div class="pagination-bar"><span id="devicePageInfo"></span><div id="devicePagination"></div></div>
+  </section>
+  <aside class="section-card details-panel" id="deviceDetails"></aside>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/devices.js?v={{ asset_v }}"></script>{% endblock %}

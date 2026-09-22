@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Điều hành nhiều cơ sở | {% endblock %}
+{% block content %}
+<div class="page-heading dashboard-heading">
+  <span><h1>Điều hành nhiều cơ sở</h1><p>Theo dõi tổng quan tình trạng các cơ sở và cảnh báo theo thời gian thực</p></span>
+  <div><select class="filter-control compact"><option>Hôm nay</option></select><button class="btn-outline-sw" id="refreshReports"><i class="bi bi-arrow-repeat"></i>Làm mới</button></div>
+</div>
+<div class="metrics-grid" id="reportMetrics"></div>
+<div class="reports-grid">
+  <section class="section-card campus-card"><div class="card-heading"><h2>Tình trạng theo khu vực</h2></div><div class="campus-plan" id="campusPlan"></div></section>
+  <section class="section-card facility-chart-card">
+    <div class="card-heading"><h2>Tỉ lệ cảnh báo theo cơ sở</h2></div>
+    <div class="facility-chart-content">
+      <div class="donut-wrap"><canvas id="facilityChart"></canvas><div class="donut-center"><small>Tổng cảnh báo</small><strong id="facilityAlertTotal">0</strong></div></div>
+      <div class="chart-legend" id="facilityLegend"></div>
+    </div>
+  </section>
+  <section class="section-card duty-card">
+    <div class="card-heading"><h2>Cơ sở &amp; nhân sự trực</h2></div>
+    <div class="table-responsive">
+      <table class="table sw-table mb-0">
+        <thead><tr><th>Cơ sở</th><th>Số đồng hồ</th><th>Số người dùng</th><th>Cảnh báo đang mở</th><th>Nhân viên trực</th></tr></thead>
+        <tbody id="facilityTable"></tbody>
+      </table>
+    </div>
+    <div class="pagination-bar report-facility-pagination"><span id="facilityPageInfo"></span><div id="facilityPagination"></div></div>
+  </section>
+  <section class="section-card telegram-card">
+    <div class="card-heading"><h2>Thông báo nhanh</h2></div>
+    <div class="telegram-connect"><span><i class="bi bi-telegram"></i></span><div><strong>Kết nối Telegram</strong><p>Nhận cảnh báo quan trọng ngay trên điện thoại của bạn.</p></div><button class="btn-outline-sw" id="telegramConnect">Kết nối ngay</button></div>
+    <div class="quick-alerts" id="quickAlerts"></div>
+    <a href="/alerts" class="show-all-alerts">Xem tất cả thông báo <i class="bi bi-chevron-right"></i></a>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/reports.js?v={{ asset_v }}"></script>{% endblock %}

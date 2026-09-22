@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Trung tâm cảnh báo | {% endblock %}
+{% block content %}
+<div class="page-heading"><h1>Trung tâm cảnh báo</h1><button class="btn-outline-sw" id="advancedAlertFilter"><i class="bi bi-funnel"></i>Bộ lọc nâng cao</button></div>
+<div class="alert-tabs" id="alertTabs">
+  <button data-status="all" class="active">Tất cả <b id="allAlertCount">0</b></button>
+  <button data-severity="high">Nguy hiểm cao <b id="highAlertCount">0</b></button>
+  <button data-status="open">Chưa xử lý <b id="openAlertCount">0</b></button>
+  <button data-status="acknowledged">Đã xác nhận</button>
+  <button data-status="closed">Đã đóng</button>
+</div>
+<div class="alerts-layout">
+  <section class="section-card alert-list-panel">
+    <div class="card-heading"><h2>Danh sách cảnh báo đang hoạt động <span id="alertCount"></span></h2></div>
+    <div class="alert-list" id="alertsList"></div>
+    <div class="pagination-bar"><span id="alertsPageInfo"></span><div id="alertsPagination"></div></div>
+  </section>
+  <section class="section-card alert-detail-panel" id="alertDetails"><div class="empty-state">Chọn cảnh báo để xem chi tiết.</div></section>
+</div>
+
+<dialog class="sw-dialog" id="advancedAlertDialog">
+  <form method="dialog" id="advancedAlertForm">
+    <h2>Bộ lọc nâng cao</h2>
+    <label>Mức độ<select name="severity"><option value="">Tất cả mức độ</option><option value="high">Nguy hiểm cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option></select></label>
+    <label>Trạng thái<select name="status"><option value="">Tất cả trạng thái</option><option value="open">Chưa xử lý</option><option value="acknowledged">Đã xác nhận</option><option value="closed">Đã đóng</option></select></label>
+    <div><button type="button" class="btn-outline-sw" data-close>Hủy</button><button type="submit" class="btn-primary-sw">Áp dụng</button></div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="/static/js/alerts.js?v={{ asset_v }}"></script>{% endblock %}

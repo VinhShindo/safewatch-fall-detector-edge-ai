@@ -60,3 +60,12 @@ data/*
 !data/eda/
 !data/eda/**
 !src/config.yaml
+
+*.pyc
+.venv/
+venv/
+data/.secret_key
+data/*.bak
+data/*.tmp
+data/*.corrupt-*
+data/telemetry/*.corrupt-*
