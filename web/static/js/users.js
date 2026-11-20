@@ -7,10 +7,99 @@
   const params = new URLSearchParams(location.search);
   let current = params.get('id');
   let heartChart = null;
+  let deviceMap = null;
+  let deviceMarker = null;
   let lastPointTime = 0;
   let liveTimer = null;
+  let laptopLocationDeviceId = null;
+  let lastLaptopLocationSentAt = 0;
+  const LAPTOP_LOCATION_MIN_INTERVAL_MS = 15000;
+  let telemetryLocationHandler = null;
 
   const reportError = title => error => SW.toast(title, error.message, true);
+
+  function mountDeviceMap(device, facilityLocation) {
+    deviceMap?.remove();
+    deviceMarker = null;
+    const node = $('#deviceLocationMap');
+    if (!node || !window.L) return;
+    const lat = Number.isFinite(Number(device?.latitude)) ? Number(device.latitude) : null;
+    const lng = Number.isFinite(Number(device?.longitude)) ? Number(device.longitude) : null;
+    const facilityLat = facilityLocation?.latitude == null ? null : Number(facilityLocation.latitude);
+    const facilityLng = facilityLocation?.longitude == null ? null : Number(facilityLocation.longitude);
+    const hasDevicePosition = lat !== null && lng !== null && device?.latitude != null && device?.longitude != null;
+    const center = hasDevicePosition ? [lat, lng]
+      : facilityLat !== null && facilityLng !== null ? [facilityLat, facilityLng] : [16.0471, 108.2068];
+    deviceMap = L.map(node).setView(center, hasDevicePosition ? 16 : facilityLat !== null ? 14 : 5);
+    SW.satelliteTileLayer(deviceMap);
+    if (hasDevicePosition) {
+      deviceMarker = L.marker([lat, lng]).addTo(deviceMap).bindPopup(`Đồng hồ ${esc(device.id)}`).openPopup();
+      $('#deviceLocationStatus').textContent = `Vị trí gần nhất: ${lat.toFixed(6)}, ${lng.toFixed(6)} · ${time(device.locationUpdatedAt || device.lastUpdated)}`;
+    } else {
+      $('#deviceLocationStatus').textContent = 'Đang chờ vị trí laptop. Cấp quyền định vị cho trình duyệt để cập nhật bản đồ.';
+    }
+    setTimeout(() => deviceMap?.invalidateSize(), 50);
+  }
+
+  function stopLaptopLocationTracking() {
+    if (telemetryLocationHandler) window.removeEventListener('sw:telemetry-updated', telemetryLocationHandler);
+    telemetryLocationHandler = null;
+    laptopLocationDeviceId = null;
+    lastLaptopLocationSentAt = 0;
+  }
+
+  async function sendLaptopLocation(deviceId, position) {
+    const latitude = position.coords.latitude;
+    const longitude = position.coords.longitude;
+    const device = await SW.api(`/api/devices/${encodeURIComponent(deviceId)}/location`, {
+      method: 'POST',
+      body: JSON.stringify({ latitude, longitude }),
+    });
+    if (deviceMap) {
+      const point = [latitude, longitude];
+      if (deviceMarker) deviceMarker.setLatLng(point);
+      else deviceMarker = L.marker(point).addTo(deviceMap).bindPopup(`Đồng hồ ${esc(device.id)}`);
+      deviceMap.setView(point, Math.max(deviceMap.getZoom(), 15));
+    }
+    $('#deviceLocationStatus').textContent = `Vị trí laptop: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} · ${time(device.locationUpdatedAt)}`;
+  }
+
+  function laptopLocationError(error) {
+    const message = error.code === 1
+      ? 'Bạn chưa cấp quyền vị trí cho trang web.'
+      : 'Không lấy được vị trí laptop. Hãy kiểm tra dịch vụ vị trí của máy.';
+    $('#deviceLocationStatus').textContent = message;
+  }
+
+  function startLaptopLocationTracking(deviceId) {
+    stopLaptopLocationTracking();
+    if (!deviceId) {
+      return;
+    }
+    if (!navigator.geolocation) {
+      $('#deviceLocationStatus').textContent = 'Trình duyệt không hỗ trợ định vị.';
+      return;
+    }
+    if (!window.isSecureContext) {
+      $('#deviceLocationStatus').textContent = 'Định vị cần HTTPS hoặc mở trang trên chính laptop bằng http://localhost.';
+      return;
+    }
+
+    laptopLocationDeviceId = deviceId;
+    $('#deviceLocationStatus').textContent = 'Vị trí laptop sẽ cập nhật khi đồng hồ gửi dữ liệu.';
+    telemetryLocationHandler = event => {
+      if (String(event.detail?.deviceId || '').toLowerCase() !== laptopLocationDeviceId.toLowerCase()) return;
+      const now = Date.now();
+      if (now - lastLaptopLocationSentAt < LAPTOP_LOCATION_MIN_INTERVAL_MS) return;
+      lastLaptopLocationSentAt = now;
+      navigator.geolocation.getCurrentPosition(position => {
+        sendLaptopLocation(deviceId, position).catch(error => {
+          $('#deviceLocationStatus').textContent = `Không gửi được vị trí: ${error.message}`;
+        });
+      }, laptopLocationError, { enableHighAccuracy: true, timeout: 20000, maximumAge: 10000 });
+    };
+    window.addEventListener('sw:telemetry-updated', telemetryLocationHandler);
+  }
 
   // ---- vẽ hồ sơ ------------------------------------------------------------------
   function profileHtml(d) {
@@ -37,13 +126,18 @@
           </div>
         </section>
         <section class="section-card user-kpi heart"><i class="bi bi-heart-fill"></i><span>Nhịp tim hiện tại</span><strong>${bpm(dev?.heartRate, '—')}</strong><small>${updated}</small></section>
+        <section class="section-card user-kpi spo2"><i class="bi bi-droplet-half"></i><span>SpO₂ ước tính</span><strong>${dev?.spo2 != null ? `${dev.spo2}%` : '—'}</strong><small>${updated}</small></section>
         <section class="section-card user-kpi battery"><i class="bi bi-battery-half"></i><span>Pin đồng hồ</span><strong>${dev?.battery ?? '—'}${dev ? '%' : ''}</strong><small>${updated}</small></section>
         <section class="section-card user-kpi fall"><i class="bi bi-shield-check"></i><span>Trạng thái</span><strong>${dev?.fallStatus === 'FALL' ? 'NGÃ' : 'KHÔNG NGÃ'}</strong><small>${updated}</small></section>
         <section class="section-card user-kpi time"><i class="bi bi-clock"></i><span>Lần cập nhật</span><strong>${time(dev?.lastUpdated)}</strong><small>${date(dev?.lastUpdated)}</small></section>
       </div>
+      <section class="section-card user-location-section">
+        <div class="user-location-heading"><span><h2>Vị trí đồng hồ</h2><p id="deviceLocationStatus">Đang kiểm tra vị trí gần nhất…</p></span></div>
+        <div id="deviceLocationMap" class="sw-map user-location-map" role="application" aria-label="Bản đồ vị trí đồng hồ"></div>
+      </section>
       <div class="profile-grid">
         <section class="section-card heart-card">
-          <div class="card-heading"><h2>Nhịp tim 24 giờ</h2><select class="filter-control compact"><option>24 giờ qua</option></select></div>
+          <div class="card-heading"><span><h2>Nhịp tim 24 giờ</h2><small id="heartRateDataSource"></small><small id="liveTelemetryStatus" role="status" aria-live="polite"></small></span><select class="filter-control compact"><option>24 giờ qua</option></select></div>
           <div class="heart-wrap"><canvas id="heartChart"></canvas></div>
         </section>
         <section class="section-card events-card">
@@ -95,6 +189,13 @@
   }
 
   function drawHeartChart(history) {
+    const dataSourceNote = $('#heartRateDataSource');
+    if (dataSourceNote) {
+      const demoRows = history.filter(point => point.dataSource === 'demo').length;
+      dataSourceNote.textContent = demoRows
+        ? `Dữ liệu mô phỏng (${demoRows} mẫu), không phải số đo thực tế.`
+        : '';
+    }
     heartChart = SW.chart('heart', $('#heartChart'), {
       type: 'line',
       data: {
@@ -117,6 +218,7 @@
   async function load() {
     if (!current) {
       clearInterval(liveTimer);
+      stopLaptopLocationTracking();
       const search = new URLSearchParams(Object.entries({ pageSize: 20, ...(params.get('q') ? { search: params.get('q') } : {}) }));
       if ($('#userFacility').value !== 'all') search.set('facilityId', $('#userFacility').value);
       if ($('#userStatus').value !== 'all') search.set('status', $('#userStatus').value);
@@ -126,8 +228,10 @@
     }
     const d = await SW.api('/api/users/' + encodeURIComponent(current));
     $('#userProfile').innerHTML = profileHtml(d);
+    mountDeviceMap(d.device, d.facilityLocation);
     drawHeartChart(d.heartRateHistory);
     startLive(d.device?.id);
+    startLaptopLocationTracking(d.device?.id);
   }
 
   // ---- cập nhật trực tiếp (dữ liệu mô phỏng / telemetry mới) --------------------------
@@ -143,8 +247,16 @@
     let series;
     try {
       series = await SW.api('/api/simulated/' + encodeURIComponent(deviceId));
-    } catch { return; }
-    if (!Array.isArray(series) || !series.length) return;
+    } catch (error) {
+      const status = $('#liveTelemetryStatus');
+      if (status) status.textContent = `Không đọc được telemetry: ${error.message}`;
+      return;
+    }
+    if (!Array.isArray(series) || !series.length) {
+      const status = $('#liveTelemetryStatus');
+      if (status) status.textContent = 'Chưa có dữ liệu telemetry trong 24 giờ gần nhất.';
+      return;
+    }
 
     const samples = series
       .map(s => ({
@@ -152,12 +264,31 @@
         heart: s.heart_rate ?? s.heartRate ?? null,
         battery: s.battery ?? null,
         fall: s.fall_status ?? s.fallStatus ?? null,
+        latitude: s.latitude ?? null,
+        longitude: s.longitude ?? null,
       }))
       .filter(s => s.at && !Number.isNaN(new Date(s.at).getTime()))
       .sort((a, b) => new Date(a.at) - new Date(b.at));
-    if (!samples.length) return;
+    if (!samples.length) {
+      const status = $('#liveTelemetryStatus');
+      if (status) status.textContent = 'Không có mẫu telemetry hợp lệ trong 24 giờ qua.';
+      return;
+    }
 
-    applyKpis(samples[samples.length - 1]);
+    const latest = samples[samples.length - 1];
+    const status = $('#liveTelemetryStatus');
+    if (status) status.textContent = `Đã tải ${samples.length} mẫu · mới nhất ${time(latest.at)}`;
+    applyKpis(latest);
+    if (latest.latitude != null && latest.longitude != null) {
+      const lat = Number(latest.latitude);
+      const lng = Number(latest.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng) && deviceMap) {
+        if (deviceMarker) deviceMarker.setLatLng([lat, lng]);
+        else deviceMarker = L.marker([lat, lng]).addTo(deviceMap);
+        deviceMap.setView([lat, lng], Math.max(deviceMap.getZoom(), 15));
+        $('#deviceLocationStatus').textContent = `Vị trí gần nhất: ${lat.toFixed(6)}, ${lng.toFixed(6)} · ${time(latest.at)}`;
+      }
+    }
     appendHeartPoints(samples);
   }
 

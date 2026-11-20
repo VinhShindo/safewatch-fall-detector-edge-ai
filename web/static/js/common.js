@@ -9,6 +9,13 @@
   // ---- DOM ---------------------------------------------------------------------
   SW.$ = (selector, root = document) => root.querySelector(selector);
   SW.$$ = (selector, root = document) => [...root.querySelectorAll(selector)];
+  SW.satelliteTileLayer = map => L.tileLayer(
+    'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+    {
+      maxZoom: 19,
+      attribution: 'Source: Esri, Vantor, Earthstar Geographics, and the GIS User Community',
+    },
+  ).addTo(map);
 
   // ---- định dạng -------------------------------------------------------------------
   const ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -181,7 +188,7 @@
       location.href = `${target}?q=${encodeURIComponent(q)}`;
     });
 
-    if (page !== 'overview') updateNotificationCount();
+    if (page !== 'overview' && document.body.dataset.role === 'admin') updateNotificationCount();
   }
 
   // ---- thời gian thực (Server-Sent Events) -------------------------------------------------------
@@ -191,6 +198,21 @@
     if (!window.EventSource) return;
     let timer;
     const source = new EventSource('/api/events');
+    source.addEventListener('AlertCreated', event => {
+      if (document.body.dataset.role !== 'admin') return;
+      try {
+        const alert = JSON.parse(event.data);
+        const details = [alert.userName, alert.message].filter(Boolean).join(' · ');
+        SW.toast('Cảnh báo mới', details, true);
+      } catch {
+        SW.toast('Cảnh báo mới', 'Có cảnh báo bất thường cần theo dõi.', true);
+      }
+    });
+    source.addEventListener('TelemetryUpdated', event => {
+      try {
+        window.dispatchEvent(new CustomEvent('sw:telemetry-updated', { detail: JSON.parse(event.data) }));
+      } catch { /* Ignore malformed event payloads. */ }
+    });
     REALTIME_EVENTS.forEach(name =>
       source.addEventListener(name, () => {
         clearTimeout(timer);
@@ -202,15 +224,13 @@
     // EventSource tự kết nối lại khi mất mạng nên không cần xử lý onerror.
   }
 
-  /**
-   * Khởi động trang: load() dựng giao diện, được gọi lại mỗi khi có sự kiện realtime.
-   * Trang không cần tự làm mới (form, cài đặt) truyền { realtime: false }.
-   */
+  // Khởi động trang: load() dựng giao diện và được gọi lại khi có sự kiện realtime.
+  // Trang không cần tự làm mới (form, cài đặt) truyền { realtime: false }.
   SW.boot = (load, { realtime = true } = {}) => {
     document.addEventListener('DOMContentLoaded', () => {
       setupShell();
       Promise.resolve(load()).catch(SW.fail('Không thể tải dữ liệu'));
-      if (realtime) startRealtime(load);
+      if (document.body.dataset.role === 'admin') startRealtime(realtime ? load : null);
     });
   };
 })();

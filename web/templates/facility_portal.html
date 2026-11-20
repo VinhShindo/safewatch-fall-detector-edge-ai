@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Cơ sở y tế | {% endblock %}
+{% block content %}
+<div class="page-heading"><span><h1>Tổng quan cơ sở y tế</h1><p>Danh sách người được theo dõi, tình trạng thiết bị và cảnh báo trong cơ sở của bạn.</p></span></div>
+<div id="facilityPortal" class="portal-loading"><div class="empty-state">Đang tải dữ liệu cơ sở…</div></div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/portal.js?v={{ asset_v }}"></script>{% endblock %}

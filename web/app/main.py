@@ -1,4 +1,4 @@
-"""SafeWatch Admin - ứng dụng FastAPI duy nhất (backend + giao diện HTML/CSS/JS)."""
+"""SeSide Admin và các portal family/facility trên cùng ứng dụng FastAPI."""
 from __future__ import annotations
 
 import asyncio
@@ -18,7 +18,7 @@ from starlette.middleware.sessions import SessionMiddleware
 from .config import BASE_DIR, Settings
 from .models import DomainError, NotFoundError
 from .realtime import RealtimeHub
-from .routers import api, device, pages
+from .routers import api, device, pages, portal
 from .security import FixedWindowRateLimiter, LoginAttemptLimiter, LoginRequired, TelemetryAuthenticator, login_redirect_target
 from .service import MonitoringService
 from .storage import InvalidDataError, JsonStore, Repository
@@ -36,7 +36,7 @@ class SecurityHeadersMiddleware:
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Permissions-Policy": "camera=(), microphone=(), geolocation=(self)",
     }
 
     def __init__(self, app) -> None:
@@ -103,7 +103,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 close_store()
 
     app = FastAPI(
-        title="SafeWatch Admin",
+        title="SeSide Admin",
         lifespan=lifespan,
         docs_url="/docs" if settings.enable_docs else None,
         redoc_url=None,
@@ -168,9 +168,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     # ---- routes --------------------------------------------------------------------------------------
     app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+    app.mount(
+        "/demo-sw002",
+        StaticFiles(directory=str(BASE_DIR.parent / "demo_sw002"), html=True),
+        name="sw002_demo",
+    )
     app.include_router(device.router)  # /health, /alert, /api/telemetry (không cần đăng nhập)
     app.include_router(api.router)  # /api/* (cần đăng nhập)
     app.include_router(pages.router)  # trang HTML
+    app.include_router(portal.pages)
+    app.include_router(portal.api)
     return app
 
 

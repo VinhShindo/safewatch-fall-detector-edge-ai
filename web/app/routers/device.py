@@ -54,13 +54,19 @@ async def esp32_alert(
         if event_type not in ("fall", "fall_detected", "fallen"):
             raise DomainError("Trường type hiện chỉ hỗ trợ giá trị 'fall'.")
 
+        device_timestamp = payload.timestamp
+        if device_timestamp is None:
+            raise DomainError("Thiếu trường timestamp.")
+        clock_skew_seconds = max(0, settings.telemetry_max_clock_skew_seconds)
+        timestamp_adjusted = abs((utcnow() - device_timestamp).total_seconds()) > clock_skew_seconds
         confidence = payload.confidence  # đã được _validate đảm bảo khác None
         threshold = min(max(settings.esp32_min_fall_confidence, 0.0), 1.0)
         accel, gyro = payload.accel, payload.gyro
         telemetry = TelemetryInput(
             device_id=device_id,
-            event_time=payload.timestamp,
+            event_time=None if timestamp_adjusted else device_timestamp,
             heart_rate=payload.heart_rate if payload.heart_rate is not None and payload.heart_rate > 0 else None,
+            spo2=payload.spo2,
             battery=payload.battery,
             rssi=payload.rssi,
             fall_status="FALL" if confidence >= threshold else "NO_FALL",
@@ -87,6 +93,10 @@ async def esp32_alert(
         "type": event_type,
         "alertCreated": len(result["createdAlerts"]) > 0,
         "receivedAtUtc": iso(utcnow()),
+        "deviceTimestamp": iso(device_timestamp),
+        "timestampAdjusted": timestamp_adjusted,
+        "serverEventTimestamp": result["telemetry"]["timestamp"],
+        "message": f"Giờ đồng hồ lệch quá {clock_skew_seconds} giây; đã dùng giờ máy chủ." if timestamp_adjusted else None,
         "result": result,
     }
 

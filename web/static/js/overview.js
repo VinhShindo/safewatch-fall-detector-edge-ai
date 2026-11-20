@@ -61,6 +61,7 @@
         <td>${badge(d.status)}</td>
         <td class="battery-${d.battery <= 20 ? 'low' : 'good'}"><i class="bi bi-battery-${d.battery > 70 ? 'full' : 'half'}"></i> ${d.battery}%</td>
         <td class="${d.heartRate > 100 ? 'heart-high' : 'heart-good'}"><i class="bi bi-heart-fill"></i> ${bpm(d.heartRate)}</td>
+        <td>${d.spo2 != null ? `${d.spo2}%` : '—'}</td>
         <td>${d.connectionStatus === 'offline' ? '<i class="bi bi-reception-0 text-danger"></i>' : '<i class="bi bi-reception-4 text-success"></i>'}</td>
         <td>${time(d.lastUpdated)}</td>
       </tr>`).join('');

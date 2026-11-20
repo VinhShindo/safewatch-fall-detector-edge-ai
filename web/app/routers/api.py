@@ -6,17 +6,51 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from ..deps import get_service
-from ..schemas import AlertActionInput, DeviceInput, FacilityInput, StaffInput, TelegramConfigInput, UserInput
-from ..security import current_user, verify_csrf
+from ..schemas import (
+    AlertActionInput,
+    DeviceInput,
+    DeviceLocationInput,
+    FacilityInput,
+    FacilityLocationInput,
+    PortalAccountInput,
+    PortalAccountStatusInput,
+    StaffInput,
+    SupportConfigInput,
+    TelegramConfigInput,
+    UserInput,
+)
+from ..security import admin_user, current_user, verify_csrf
 from ..service import MonitoringService
 
-router = APIRouter(prefix="/api", dependencies=[Depends(current_user), Depends(verify_csrf)])
+router = APIRouter(prefix="/api", dependencies=[Depends(admin_user), Depends(verify_csrf)])
 
 Service = Depends(get_service)
 
 
 def _not_found(what: str = "Không tìm thấy dữ liệu.") -> HTTPException:
     return HTTPException(status_code=404, detail=what)
+
+
+@router.get("/portal-accounts")
+async def list_portal_accounts(svc: MonitoringService = Service):
+    return svc.list_portal_accounts()
+
+
+@router.post("/portal-accounts", status_code=201)
+async def create_portal_account(payload: PortalAccountInput, svc: MonitoringService = Service):
+    return svc.create_portal_account(payload)
+
+
+@router.patch("/portal-accounts/{account_id}")
+async def set_portal_account_status(
+    account_id: str,
+    payload: PortalAccountStatusInput,
+    svc: MonitoringService = Service,
+):
+    result = svc.set_portal_account_active(account_id, payload.active)
+    if result is None:
+        raise _not_found("Không tìm thấy tài khoản portal.")
+    return result
 
 
 # ---- dashboard ---------------------------------------------------------------------
@@ -62,6 +96,18 @@ async def request_device_check(device_id: str, svc: MonitoringService = Service)
     if await svc.request_device_check(device_id) is None:
         raise _not_found("Không tìm thấy thiết bị.")
     return {"accepted": True, "deviceId": device_id}
+
+
+@router.post("/devices/{device_id}/location")
+async def update_device_location(
+    device_id: str,
+    payload: DeviceLocationInput,
+    svc: MonitoringService = Service,
+):
+    result = await svc.update_device_location(device_id, payload.latitude, payload.longitude)
+    if result is None:
+        raise _not_found("Không tìm thấy đồng hồ.")
+    return result
 
 
 # ---- người dùng -------------------------------------------------------------------------
@@ -154,6 +200,18 @@ async def create_facility(payload: FacilityInput, svc: MonitoringService = Servi
     return svc.create_facility(payload)
 
 
+@router.post("/facilities/{facility_id}/location")
+async def update_facility_location(
+    facility_id: str,
+    payload: FacilityLocationInput,
+    svc: MonitoringService = Service,
+):
+    result = svc.update_facility_location(facility_id, payload.latitude, payload.longitude)
+    if result is None:
+        raise _not_found("Không tìm thấy cơ sở.")
+    return result
+
+
 # ---- Telegram --------------------------------------------------------------------------------------
 @router.get("/telegram/status")
 async def telegram_status(svc: MonitoringService = Service):
@@ -173,6 +231,22 @@ async def telegram_config(payload: TelegramConfigInput, svc: MonitoringService =
 @router.get("/telegram/messages")
 async def telegram_messages(svc: MonitoringService = Service):
     return await svc.telegram_messages()
+
+
+@router.get("/support/config")
+async def support_config(svc: MonitoringService = Service):
+    return svc.support_config()
+
+
+@router.post("/support/config")
+async def save_support_config(
+    payload: SupportConfigInput,
+    request: Request,
+    svc: MonitoringService = Service,
+):
+    result = svc.configure_support(payload.name, payload.phone, payload.email, payload.hours)
+    request.app.state.settings = svc.settings
+    return result
 
 
 # ---- dữ liệu mô phỏng ---------------------------------------------------------------------------------

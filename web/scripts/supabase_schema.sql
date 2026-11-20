@@ -19,7 +19,14 @@ create table if not exists staff (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists residents (
+do $$
+begin
+  if to_regclass('public.users') is null and to_regclass('public.residents') is not null then
+    alter table public.residents rename to users;
+  end if;
+end $$;
+
+create table if not exists users (
   id text primary key,
   data jsonb not null,
   updated_at timestamptz not null default now()
@@ -32,6 +39,12 @@ create table if not exists devices (
 );
 
 create table if not exists assignments (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists portal_accounts (
   id text primary key,
   data jsonb not null,
   updated_at timestamptz not null default now()

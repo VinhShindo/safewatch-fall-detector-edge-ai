@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}Gia đình | {% endblock %}
+{% block content %}
+<div class="page-heading"><span><h1>Cổng thông tin gia đình</h1><p>Theo dõi tình trạng người thân và đồng hồ được gán cho tài khoản.</p></span></div>
+<div id="familyPortal" class="portal-loading"><div class="empty-state">Đang tải hồ sơ người thân…</div></div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/portal.js?v={{ asset_v }}"></script>{% endblock %}

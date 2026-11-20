@@ -145,6 +145,8 @@ class Facility(Entity):
     address: Text = ""
     manager_staff_id: str | None = None
     phone: Text = ""
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class Room(Entity):
@@ -163,6 +165,18 @@ class Staff(Entity):
     email: Text = ""
     shift_start: Text = "07:00"
     shift_end: Text = "19:00"
+
+
+class PortalAccount(Entity):
+    id: Text = ""
+    username: Text = ""
+    password_hash: Text = ""
+    role: Text = "family"
+    resident_id: str | None = None
+    facility_id: str | None = None
+    staff_id: str | None = None
+    active: bool = True
+    created_at_utc: UtcDateTime = Field(default_factory=utcnow)
 
 
 class Resident(Entity):
@@ -194,7 +208,9 @@ class Assignment(Entity):
 class Telemetry(Entity):
     device_id: Text = ""
     timestamp_utc: UtcDateTime
+    data_source: Text = "device"
     heart_rate: int | None = None
+    spo2: int | None = None
     battery: int | None = None
     fall_status: FallStatus = FallStatus.NO_FALL
     fall_probability: float | None = None
@@ -207,6 +223,8 @@ class Telemetry(Entity):
     gyro_x: float | None = None
     gyro_y: float | None = None
     gyro_z: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
 
 
 class Device(Entity):
@@ -217,6 +235,7 @@ class Device(Entity):
     status: DeviceStatus = DeviceStatus.ACTIVE
     battery: int = 100
     heart_rate: int | None = None
+    spo2: int | None = None
     fall_status: FallStatus = FallStatus.NO_FALL
     fall_probability: float | None = None
     connection_status: ConnectionStatus = ConnectionStatus.GOOD
@@ -224,6 +243,9 @@ class Device(Entity):
     last_updated_utc: UtcDateTime = Field(default_factory=utcnow)
     last_sync_utc: UtcDateTime = Field(default_factory=utcnow)
     firmware_version: Text = "v1.2.4"
+    latitude: float | None = None
+    longitude: float | None = None
+    location_updated_at_utc: UtcDateTime | None = None
 
     def apply_telemetry(self, telemetry: Telemetry) -> None:
         if self.id.lower() != telemetry.device_id.lower():
@@ -234,6 +256,12 @@ class Device(Entity):
             self.battery = telemetry.battery
         if telemetry.heart_rate is not None:
             self.heart_rate = telemetry.heart_rate
+        if telemetry.spo2 is not None:
+            self.spo2 = telemetry.spo2
+        if telemetry.latitude is not None and telemetry.longitude is not None:
+            self.latitude = telemetry.latitude
+            self.longitude = telemetry.longitude
+            self.location_updated_at_utc = telemetry.timestamp_utc
         self.fall_status = telemetry.fall_status
         self.fall_probability = telemetry.fall_probability
         self.connection_status = telemetry.connection_status
@@ -271,6 +299,8 @@ class Alert(Entity):
     user_id: str | None = None
     facility_id: Text = ""
     room_id: Text = ""
+    latitude: float | None = None
+    longitude: float | None = None
     message: Text = ""
     event_at_utc: UtcDateTime
     created_at_utc: UtcDateTime

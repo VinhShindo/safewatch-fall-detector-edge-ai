@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Đăng nhập | SafeWatch Admin</title>
+  <title>Đăng nhập | SeSide</title>
+  <link rel="icon" href="/static/images/logo.jpg" type="image/jpeg">
   <link rel="stylesheet" href="/static/css/site.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/static/css/monitoring.css?v={{ asset_v }}">
   <link rel="stylesheet" href="/static/css/monitoring-overrides.css?v={{ asset_v }}">
@@ -11,9 +12,9 @@
 </head>
 <body class="login-page">
   <main class="login-card">
-    <a class="brand login-brand" href="/"><span class="brand-mark"><i class="bi bi-heart-pulse-fill"></i></span><span class="brand-copy"><strong>SafeWatch <em>Admin</em></strong><small>Nền tảng quản lý đồng hồ an toàn</small></span></a>
-    <h1>Đăng nhập quản trị</h1>
-    <p class="login-subtitle">Đăng nhập để theo dõi thiết bị, cảnh báo và hồ sơ người dùng.</p>
+    <a class="brand login-brand" href="/"><span class="brand-mark"><img src="/static/images/logo.jpg" alt=""></span><span class="brand-copy"><strong>SeSide <em>Admin</em></strong><small>Nền tảng quản lý đồng hồ an toàn</small></span></a>
+    <h1>Đăng nhập SeSide</h1>
+    <p class="login-subtitle">Đăng nhập bằng tài khoản được cấp. Giao diện và dữ liệu sẽ được giới hạn theo quyền của bạn.</p>
     <form method="post" action="/account/login">
       <input type="hidden" name="return_url" value="{{ return_url }}">
       {% if error %}<div class="login-error">{{ error }}</div>{% endif %}

@@ -10,6 +10,7 @@ import logging
 import os
 import shutil
 import threading
+import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -24,6 +25,7 @@ from .models import (
     Device,
     Entity,
     Facility,
+    PortalAccount,
     Resident,
     Room,
     Staff,
@@ -33,6 +35,7 @@ from .models import (
 
 log = logging.getLogger("safewatch.storage")
 T = TypeVar("T", bound=Entity)
+_CONTEXT_CACHE_TTL_SECONDS = 10
 
 
 class InvalidDataError(Exception):
@@ -160,6 +163,7 @@ class Context:
     rooms: list[Room] = field(default_factory=list)
     staff: list[Staff] = field(default_factory=list)
     assignments: list[Assignment] = field(default_factory=list)
+    portal_accounts: list[PortalAccount] = field(default_factory=list)
 
 
 class Repository:
@@ -168,11 +172,17 @@ class Repository:
     def __init__(self, store: JsonStore) -> None:
         self.store = store
         self._context_cache: Context | None = None
+        self._context_cache_loaded_at: float | None = None
         self._context_cache_lock = threading.RLock()
 
     def load_context(self) -> Context:
         with self._context_cache_lock:
-            if self._context_cache is not None:
+            now = time.monotonic()
+            if (
+                self._context_cache is not None
+                and self._context_cache_loaded_at is not None
+                and now - self._context_cache_loaded_at < _CONTEXT_CACHE_TTL_SECONDS
+            ):
                 return self._context_cache
             s = self.store
             context = Context(
@@ -183,13 +193,16 @@ class Repository:
                 rooms=s.read_list("rooms.json", Room),
                 staff=s.read_list("staff.json", Staff),
                 assignments=s.read_list("assignments.json", Assignment),
+                portal_accounts=s.read_list("portal_accounts.json", PortalAccount),
             )
             self._context_cache = context
+            self._context_cache_loaded_at = time.monotonic()
             return self._context_cache
 
     def invalidate_context(self) -> None:
         with self._context_cache_lock:
             self._context_cache = None
+            self._context_cache_loaded_at = None
 
     def save_devices(self, items: list[Device]) -> None:
         self.store.write_list("devices.json", items)
@@ -209,6 +222,10 @@ class Repository:
 
     def save_assignments(self, items: list[Assignment]) -> None:
         self.store.write_list("assignments.json", items)
+        self.invalidate_context()
+
+    def save_portal_accounts(self, items: list[PortalAccount]) -> None:
+        self.store.write_list("portal_accounts.json", items)
         self.invalidate_context()
 
     def save_facilities(self, items: list[Facility]) -> None:

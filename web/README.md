@@ -1,6 +1,6 @@
-# SafeWatch Admin
+# SeSide Admin
 
-SafeWatch Admin là hệ thống quản trị đồng hồ AIoT cho người cao tuổi.
+SeSide Admin là hệ thống quản trị đồng hồ AIoT cho người cao tuổi.
 Backend dùng **Python + FastAPI**, giao diện dùng **HTML/CSS/JavaScript**, dữ liệu production lưu qua **Supabase Python client + PostgREST**.
 
 ## Tính năng
@@ -9,18 +9,24 @@ Backend dùng **Python + FastAPI**, giao diện dùng **HTML/CSS/JavaScript**, d
 - Quản lý thiết bị và trạng thái online/offline.
 - Quản lý người dùng/người được chăm sóc.
 - Quản lý cơ sở tại `/facilities`.
+- Bản đồ vị trí từng cơ sở và vị trí GPS mới nhất của đồng hồ.
+- Các bản đồ dùng ảnh vệ tinh Esri World Imagery, có ghi nguồn Esri và các nhà cung cấp ảnh.
+- Chọn tọa độ cơ sở bằng cách nhấn bản đồ; trong lúc hồ sơ người dùng mở, vị trí laptop được dùng làm vị trí demo của đồng hồ khi có telemetry mới và trình duyệt đã được cấp quyền định vị.
+- Cấu hình tên, điện thoại, email và giờ hoạt động của bộ phận hỗ trợ tại trang Cài đặt.
 - Quản lý đội ngũ nhân viên y tế theo từng cơ sở.
 - Trung tâm cảnh báo: té ngã, nhịp tim bất thường, pin yếu, mất kết nối.
 - Nhận telemetry và cảnh báo từ ESP32.
 - Cập nhật realtime bằng Server-Sent Events.
 - Gửi và đọc tin nhắn Telegram.
-- Cache snapshot dữ liệu trong suốt vòng đời ứng dụng để giảm số lần truy xuất Supabase.
+- Cache snapshot dữ liệu trong 10 giây để giảm truy xuất Supabase; dữ liệu cũng được nạp lại ngay sau mỗi lần ứng dụng ghi.
+- Portal người nhà chỉ xem một hồ sơ bệnh nhân được gán.
+- Portal cơ sở y tế chỉ xem dữ liệu của cơ sở được gán.
 
 ## Yêu cầu
 
 - Python 3.11 trở lên.
 - Một project Supabase đã tạo.
-- Các bảng SafeWatch đã được khởi tạo bằng `scripts/supabase_schema.sql`.
+- Các bảng SeSide đã được khởi tạo bằng `scripts/supabase_schema.sql`.
 
 ## Cài đặt và chạy
 
@@ -37,7 +43,32 @@ Mở trình duyệt tại:
 http://localhost:5248
 ```
 
+Mở **Người dùng → hồ sơ bệnh nhân có gán đồng hồ** trên laptop và cấp quyền định vị cho trình duyệt. Không cần nút cập nhật thủ công: trình duyệt tự lấy vị trí laptop khi hồ sơ đang mở và đồng hồ gửi telemetry, cập nhật tọa độ riêng cho đúng Device ID rồi phát sự kiện để bản đồ làm mới. Hãy mở trang bằng `http://localhost:5248` hoặc HTTPS; trình duyệt thường chặn Geolocation trên địa chỉ HTTP qua IP LAN. Heartbeat và cảnh báo từ đồng hồ được máy chủ gắn tọa độ laptop gần nhất đã nhận. Nếu cần vị trí độc lập với laptop hoặc chạy khi hồ sơ không mở, đồng hồ cần module GNSS.
+
+Các bản đồ trong hồ sơ người dùng, trang cơ sở và portal dùng nền ảnh vệ tinh Esri World Imagery; bản đồ ngoài từ cảnh báo cũng mở ở chế độ vệ tinh. Bản đồ tải ảnh từ máy chủ Esri và hiển thị attribution của nhà cung cấp. Khi mở liên kết vị trí cảnh báo, tọa độ cũng được gửi cho Google Maps. Việc sử dụng ảnh phải tuân theo [điều khoản Esri](https://www.esri.com/en-us/legal/terms/data-attributions).
+
 Tài khoản mặc định nằm trong `.env`. Hãy đổi mật khẩu trước khi dùng thật.
+
+## Portal người nhà và cơ sở y tế
+
+Quản trị viên đăng nhập, vào **Cài đặt → Tài khoản cổng thông tin** để tạo tài khoản:
+
+- `family`: bắt buộc gán với một bệnh nhân; chỉ truy cập `/family` và dữ liệu của bệnh nhân đó.
+- `facility`: bắt buộc gán với một cơ sở, có thể gán thêm nhân viên; chỉ truy cập `/facility-portal` và dữ liệu thuộc cơ sở đó.
+
+Mật khẩu portal tối thiểu 12 ký tự và được lưu dưới dạng PBKDF2 hash. Có thể khóa/mở lại tài khoản trong bảng cùng trang. Khi bị khóa, phiên portal hiện tại cũng mất quyền ở request kế tiếp. Cấp mật khẩu ban đầu cho người dùng qua kênh riêng.
+
+Nếu Supabase đã được khởi tạo trước khi thêm portal, chạy migration sau trong SQL Editor:
+
+```sql
+create table if not exists portal_accounts (
+  id text primary key,
+  data jsonb not null,
+  updated_at timestamptz not null default now()
+);
+revoke all on portal_accounts from anon, authenticated;
+grant all on portal_accounts to postgres, service_role;
+```
 
 Tạo password hash mới:
 
@@ -145,7 +176,7 @@ Schema hiện tại tạo các bảng:
 - `facilities`
 - `rooms`
 - `staff`
-- `residents`
+- `users`
 - `devices`
 - `assignments`
 - `alerts`
@@ -168,7 +199,7 @@ python -c "from app.config import Settings; s=Settings.from_env(); print(s.stora
 Thứ tự dữ liệu nên là:
 
 ```text
-facilities -> rooms -> staff -> residents -> devices -> assignments
+facilities -> rooms -> staff -> users -> devices -> assignments
 ```
 
 Dữ liệu lịch sử `telemetry_records` và `alerts` có thể được thêm sau khi thiết bị bắt đầu gửi dữ liệu.
@@ -255,9 +286,13 @@ Khi nhận `/alert`, server sẽ:
 1. Xác định thiết bị qua `X-Device-Id` hoặc `ESP32_DEFAULT_DEVICE_ID`.
 2. Chuyển payload thành telemetry nội bộ.
 3. Lưu lịch sử telemetry.
-4. Cập nhật nhịp tim, pin, RSSI, gia tốc, gyro và trạng thái thiết bị.
-5. Tạo cảnh báo té ngã nếu confidence vượt `ESP32_MIN_FALL_CONFIDENCE`.
-6. Gửi Telegram nếu được bật.
+4. Chỉ cập nhật trạng thái thiết bị nếu timestamp không cũ hơn dữ liệu hiện tại.
+5. Tạo cảnh báo té ngã nếu confidence vượt `ESP32_MIN_FALL_CONFIDENCE`; telemetry té ngã cũ vẫn tạo/gửi cảnh báo nhưng không ghi đè trạng thái thiết bị mới hơn.
+6. Gửi Telegram nếu được bật; nếu cảnh báo té ngã trước đó vẫn đang mở thì vẫn gửi thông báo cho lần té ngã mới, nhưng không tạo cảnh báo trùng. Gửi lại cùng một sự kiện/timestamp không gửi lặp thông báo.
+
+`success: true` từ `/alert` xác nhận máy chủ đã xử lý telemetry, không xác nhận Telegram đã gửi tin. Xem kết quả gửi cảnh báo gần nhất ở **Cài đặt → Telegram Bot API**; kết quả được lưu trong bộ nhớ và sẽ mất khi khởi động lại máy chủ.
+
+Thông báo Telegram té ngã chỉ gồm người bệnh/mức độ, nhịp tim, SpO₂, pin, giờ Việt Nam UTC+7, địa chỉ cơ sở đã lưu (nếu có) và liên kết bản đồ tới tọa độ gần nhất. Firmware hiện không gửi GPS trực tiếp; tọa độ này có thể là vị trí gần nhất do trình duyệt/laptop cập nhật. Nếu giờ ESP32 lệch máy chủ quá `TELEMETRY_MAX_CLOCK_SKEW_SECONDS` (mặc định 300 giây), server dùng giờ nhận cảnh báo và trả lại `deviceTimestamp`, `serverEventTimestamp`, `timestampAdjusted` để chẩn đoán.
 
 ### Telemetry định kỳ: `POST /api/telemetry`
 
@@ -318,6 +353,22 @@ Chỉ gửi telemetry, không tạo cảnh báo:
 python scripts/send_sample_data.py SW-0003 --telemetry-only
 ```
 
+### Khởi tạo lịch sử nhịp tim demo
+
+Nếu hồ sơ người dùng chưa có biểu đồ nhịp tim, xem trước số lượng dữ liệu sẽ thêm:
+
+```bash
+python scripts/seed_heart_rate_demo.py
+```
+
+Ghi 24 mẫu mô phỏng trong 24 giờ gần nhất cho mỗi đồng hồ chưa có telemetry nhịp tim thật gần đây:
+
+```bash
+python scripts/seed_heart_rate_demo.py --apply
+```
+
+Dữ liệu được đánh dấu `dataSource=demo` và biểu đồ sẽ ghi rõ đây là dữ liệu mô phỏng, không phải số đo thực tế. Thiết bị đã có telemetry nhịp tim thật trong 24 giờ sẽ được bỏ qua.
+
 Gửi tới server khác:
 
 ```powershell
@@ -346,7 +397,7 @@ ESP32
 | Cơ sở | `facilities` |
 | Phòng | `rooms` |
 | Nhân viên | `staff` |
-| Người dùng | `residents` |
+| Người dùng | `users` |
 | Trạng thái thiết bị mới nhất | `devices` |
 | Lịch sử gán thiết bị | `assignments` |
 | Cảnh báo | `alerts` |
@@ -398,6 +449,9 @@ Sau đó mở `/docs`.
 | `scripts/reset_and_seed_supabase.py` | Xóa toàn bộ bảng và nạp JSON mới sau khi validate |
 | `scripts/supabase_schema.sql` | Tạo các bảng SafeWatch |
 | `scripts/seed_data.sql` | Seed SQL theo schema `id + data jsonb` |
+| `scripts/update_dien_hong_facility.sql` | Cập nhật FAC-001 và FAC-002 thành các cơ sở Diên Hồng |
+
+Để cập nhật hai cơ sở trên Supabase đang sử dụng mà không xóa dữ liệu khác, chạy `scripts/update_dien_hong_facility.sql` trong Supabase SQL Editor.
 
 ### Migrate dữ liệu JSON cũ
 

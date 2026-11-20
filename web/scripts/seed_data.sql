@@ -8,8 +8,8 @@ BEGIN;
 -- 1. FACILITIES  (managerStaffId để NULL, update sau khi có staff)
 -- ---------------------------------------------------------------------
 INSERT INTO "facilities" ("id","data") VALUES
-('FAC-001', '{"id":"FAC-001","name":"Cơ sở Bình An","address":"12 Nguyễn Trãi, Hà Nội","managerStaffId":null,"phone":"0241234567"}'::jsonb),
-('FAC-002', '{"id":"FAC-002","name":"Cơ sở An Khang","address":"45 Lê Lợi, TP. Hồ Chí Minh","managerStaffId":null,"phone":"0287654321"}'::jsonb);
+('FAC-001', '{"id":"FAC-001","name":"Viện dưỡng lão Diên Hồng - Cơ sở 1","address":"U07-L16, Khu đô thị mới Dương Nội, Yên Nghĩa, Hà Nội","latitude":20.9565885,"longitude":105.7357884,"managerStaffId":null,"phone":"0241234567"}'::jsonb),
+('FAC-002', '{"id":"FAC-002","name":"Viện dưỡng lão Diên Hồng - Cơ sở 2","address":"A2.3-LK05-Ô số 18, Khu đô thị Thanh Hà Cienco5, Bình Minh, Hà Nội","latitude":20.9261211,"longitude":105.782661,"managerStaffId":null,"phone":"0981126507"}'::jsonb);
 
 -- ---------------------------------------------------------------------
 -- 2. ROOMS
@@ -32,9 +32,9 @@ UPDATE "facilities" SET "data" = jsonb_set("data", '{managerStaffId}', '"STAFF-0
 UPDATE "facilities" SET "data" = jsonb_set("data", '{managerStaffId}', '"STAFF-003"'::jsonb) WHERE "id" = 'FAC-002';
 
 -- ---------------------------------------------------------------------
--- 4. RESIDENTS  (deviceId để NULL, update sau khi có devices)
+-- 4. USERS  (deviceId để NULL, update sau khi có devices)
 -- ---------------------------------------------------------------------
-INSERT INTO "residents" ("id","data")
+INSERT INTO "users" ("id","data")
 VALUES
 ('USR-001', '{"id":"USR-001","fullName":"Trần Văn Minh","gender":"Nam","birthYear":1948,"facilityId":"FAC-001","roomId":"ROOM-001","staffId":"STAFF-001","deviceId":null,"isMonitored":true,"contact":{"name":"Trần Thị Lan","relation":"Con gái","phone":"0909876543","email":"lan@gmail.com"}}'::jsonb),
 ('USR-002', '{"id":"USR-002","fullName":"Phạm Thị Lan","gender":"Nữ","birthYear":1952,"facilityId":"FAC-001","roomId":"ROOM-002","staffId":"STAFF-001","deviceId":null,"isMonitored":true,"contact":{"name":"Phạm Văn Hùng","relation":"Con trai","phone":"0912345678","email":"hung@gmail.com"}}'::jsonb),
@@ -49,10 +49,10 @@ VALUES
 ('SW-0002', '{"id":"SW-0002","userId":"USR-002","facilityId":"FAC-001","roomId":"ROOM-002","status":"Active","battery":62,"heartRate":78,"fallStatus":"NoFall","fallProbability":0.02,"connectionStatus":"Good","rssi":-68,"lastUpdatedUtc":"2026-09-21T08:30:00Z","lastSyncUtc":"2026-09-21T08:30:00Z","firmwareVersion":"v1.2.4"}'::jsonb),
 ('SW-0003', '{"id":"SW-0003","userId":"USR-003","facilityId":"FAC-002","roomId":"ROOM-003","status":"LowBattery","battery":15,"heartRate":82,"fallStatus":"NoFall","fallProbability":0.03,"connectionStatus":"Weak","rssi":-85,"lastUpdatedUtc":"2026-09-21T08:30:00Z","lastSyncUtc":"2026-09-21T08:15:00Z","firmwareVersion":"v1.2.3"}'::jsonb);
 
--- Gắn ngược deviceId vào residents
-UPDATE "residents" SET "data" = jsonb_set("data", '{deviceId}', '"SW-0001"'::jsonb) WHERE "id" = 'USR-001';
-UPDATE "residents" SET "data" = jsonb_set("data", '{deviceId}', '"SW-0002"'::jsonb) WHERE "id" = 'USR-002';
-UPDATE "residents" SET "data" = jsonb_set("data", '{deviceId}', '"SW-0003"'::jsonb) WHERE "id" = 'USR-003';
+-- Gắn ngược deviceId vào users
+UPDATE "users" SET "data" = jsonb_set("data", '{deviceId}', '"SW-0001"'::jsonb) WHERE "id" = 'USR-001';
+UPDATE "users" SET "data" = jsonb_set("data", '{deviceId}', '"SW-0002"'::jsonb) WHERE "id" = 'USR-002';
+UPDATE "users" SET "data" = jsonb_set("data", '{deviceId}', '"SW-0003"'::jsonb) WHERE "id" = 'USR-003';
 
 -- ---------------------------------------------------------------------
 -- 6. ASSIGNMENTS
@@ -96,7 +96,7 @@ COMMIT;
 -- SELECT 'facilities' AS t, COUNT(*) FROM "facilities"
 -- UNION ALL SELECT 'rooms',       COUNT(*) FROM "rooms"
 -- UNION ALL SELECT 'staff',       COUNT(*) FROM "staff"
--- UNION ALL SELECT 'residents',   COUNT(*) FROM "residents"
+-- UNION ALL SELECT 'users',       COUNT(*) FROM "users"
 -- UNION ALL SELECT 'devices',     COUNT(*) FROM "devices"
 -- UNION ALL SELECT 'assignments', COUNT(*) FROM "assignments"
 -- UNION ALL SELECT 'telemetry_records', COUNT(*) FROM "telemetry_records"

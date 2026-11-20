@@ -69,3 +69,5 @@ data/*.bak
 data/*.tmp
 data/*.corrupt-*
 data/telemetry/*.corrupt-*
+
+demo_sw002

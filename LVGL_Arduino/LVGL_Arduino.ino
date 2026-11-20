@@ -15,6 +15,7 @@
 
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <WiFiClientSecure.h>
 #include <NTPClient.h>
 #include <WebServer.h>
 #include <HTTPClient.h>
@@ -23,6 +24,9 @@
 #include <time.h>
 #include <math.h>
 #include <esp32-hal-psram.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <new>
 
 // --------------------------- Cấu hình người dùng ---------------------------
 static constexpr long GMT_OFFSET_SECONDS = 7L * 3600L;   // UTC+7
@@ -56,6 +60,10 @@ static unsigned long lastFallSampleTime = 0;
 // --------------------------- Cấu hình board --------------------------------
 static constexpr uint16_t SCREEN_WIDTH = 240;
 static constexpr uint16_t SCREEN_HEIGHT = 240;
+static constexpr uint8_t DISPLAY_ROTATION = 1;  // Rotate left 90 degrees
+static constexpr float WEATHER_LATITUDE = 20.9565885f;
+static constexpr float WEATHER_LONGITUDE = 105.7357884f;
+static constexpr uint32_t WEATHER_UPDATE_INTERVAL_MS = 15UL * 60UL * 1000UL;
 
 static constexpr uint8_t PIN_I2C_SDA = 6;
 static constexpr uint8_t PIN_I2C_SCL = 7;
@@ -74,6 +82,15 @@ String backendUrl = "";
 // --------------- NTP Client -------------------
 WiFiUDP ntpUDP;
 NTPClient timeClient(ntpUDP, "pool.ntp.org", 0, 60000); // offset 0, giờ UTC
+static constexpr time_t MIN_VALID_EPOCH = 1735689600; // 2025-01-01 UTC
+static constexpr uint32_t CLOCK_CHECKPOINT_INTERVAL_MS = 15UL * 60UL * 1000UL;
+static constexpr uint32_t TELEMETRY_INTERVAL_MS = 30UL * 1000UL;
+static constexpr char DEVICE_ID[] = "SW-0002";
+static time_t clockBaseUtc = 0;
+static uint32_t clockBaseMillis = 0;
+static uint32_t lastClockCheckpointMs = 0;
+static uint32_t lastNtpAttemptMs = 0;
+static bool clockValid = false;
 
 
 #define FALL_COOLDOWN_MS 10000
@@ -114,8 +131,25 @@ static constexpr uint16_t LVGL_BUF_ROWS = 10;
 static lv_obj_t *batteryArc, *batteryLabel, *batteryIconLabel, *pinBox;
 static lv_obj_t *timeLabel, *dateLabel;
 static lv_obj_t *heartCard, *heartIcon, *heartRateLabel, *heartBpmLabel;
+static lv_obj_t *spo2Card, *spo2Label;
 static lv_obj_t *statusCard, *statusIcon, *statusLabel;
 static lv_obj_t *sosOverlay = NULL;
+static lv_obj_t *weatherScreen = NULL;
+static lv_obj_t *weatherBatteryArc = NULL;
+static lv_obj_t *weatherBatteryLabel = NULL;
+static lv_obj_t *weatherBatteryIconLabel = NULL;
+static lv_obj_t *weatherTemperatureLabel = NULL;
+static lv_obj_t *weatherHumidityLabel = NULL;
+static lv_obj_t *weatherRainLabel = NULL;
+static volatile uint8_t pendingWatchGesture = 0;
+static portMUX_TYPE weatherMux = portMUX_INITIALIZER_UNLOCKED;
+static volatile bool weatherFetchInProgress = false;
+static bool weatherFetchFailed = false;
+static bool weatherHasData = false;
+static float weatherTemperature = 0.0f;
+static float weatherHumidity = 0.0f;
+static float weatherPrecipitation = 0.0f;
+static uint32_t weatherUiVersion = 0;
 
 #define FONT_TIME_BIG &lv_font_montserrat_32
 #define FONT_TIME_SMALL &lv_font_montserrat_16
@@ -145,8 +179,17 @@ void my_touchpad_read(lv_indev_drv_t *indev_drv, lv_indev_data_t *data) {
     data->state = LV_INDEV_STATE_REL;
   } else {
     data->state = LV_INDEV_STATE_PR;
-    data->point.x = touch.data.x;
-    data->point.y = SCREEN_HEIGHT - 1 - touch.data.y;
+    if (touch.data.gestureID != NONE) pendingWatchGesture = touch.data.gestureID;
+    if (DISPLAY_ROTATION == 1) {
+      data->point.x = SCREEN_WIDTH - 1 - touch.data.y;
+      data->point.y = touch.data.x;
+    } else if (DISPLAY_ROTATION == 3) {
+      data->point.x = touch.data.y;
+      data->point.y = SCREEN_HEIGHT - 1 - touch.data.x;
+    } else {
+      data->point.x = touch.data.x;
+      data->point.y = SCREEN_HEIGHT - 1 - touch.data.y;
+    }
   }
 }
 
@@ -159,7 +202,7 @@ static lv_obj_t *createLabel(lv_obj_t *parent, const char *text, const lv_font_t
 }
 
 // ================== SOS UI ==================
-static void dismissSOS() {
+static void closeSOSOverlay() {
   if (sosActive) {
     lv_obj_add_flag(sosOverlay, LV_OBJ_FLAG_HIDDEN);
     sosActive = false;
@@ -167,8 +210,13 @@ static void dismissSOS() {
     fallCooldown = true;
     sosDismissTime = millis();
     windowSampleIndex = 0;
-    Serial.println("SOS dismissed by user, no alert sent.");
   }
+}
+
+static void dismissSOS() {
+  if (!sosActive) return;
+  closeSOSOverlay();
+  Serial.println("SOS cancelled by screen touch before alert was sent.");
 }
 
 static void showSosScreen() {
@@ -212,6 +260,83 @@ static void createSosOverlay() {
       dismissSOS();
     }
   }, LV_EVENT_CLICKED, NULL);
+}
+
+static void createWeatherScreen(lv_obj_t *parent) {
+  weatherScreen = lv_obj_create(parent);
+  lv_obj_set_size(weatherScreen, SCREEN_WIDTH, SCREEN_HEIGHT);
+  lv_obj_set_pos(weatherScreen, 0, 0);
+  lv_obj_set_style_bg_color(weatherScreen, rgb(0x0A1422), 0);
+  lv_obj_set_style_bg_opa(weatherScreen, LV_OPA_COVER, 0);
+  lv_obj_set_style_border_width(weatherScreen, 0, 0);
+  setObjectNoScroll(weatherScreen);
+  lv_obj_add_flag(weatherScreen, LV_OBJ_FLAG_HIDDEN);
+
+  weatherBatteryArc = lv_arc_create(weatherScreen);
+  lv_obj_set_size(weatherBatteryArc, 224, 224);
+  lv_obj_center(weatherBatteryArc);
+  lv_arc_set_rotation(weatherBatteryArc, 135);
+  lv_arc_set_bg_angles(weatherBatteryArc, 0, 270);
+  lv_arc_set_range(weatherBatteryArc, 0, 100);
+  lv_arc_set_value(weatherBatteryArc, 75);
+  lv_obj_remove_style(weatherBatteryArc, nullptr, LV_PART_KNOB);
+  lv_obj_clear_flag(weatherBatteryArc, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_style_arc_width(weatherBatteryArc, 8, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(weatherBatteryArc, 8, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(weatherBatteryArc, rgb(0x141E33), LV_PART_MAIN);
+  lv_obj_set_style_arc_color(weatherBatteryArc, rgb(0x66D9A0), LV_PART_INDICATOR);
+
+  lv_obj_t *weatherPinBox = lv_obj_create(weatherScreen);
+  lv_obj_set_size(weatherPinBox, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_bg_opa(weatherPinBox, LV_OPA_TRANSP, 0);
+  lv_obj_set_style_border_width(weatherPinBox, 0, 0);
+  lv_obj_set_style_pad_all(weatherPinBox, 0, 0);
+  setObjectNoScroll(weatherPinBox);
+  lv_obj_align(weatherPinBox, LV_ALIGN_TOP_MID, 0, 8);
+
+  weatherBatteryLabel = createLabel(weatherPinBox, "68%", FONT_NORMAL, rgb(0x66D9A0));
+  lv_obj_align(weatherBatteryLabel, LV_ALIGN_LEFT_MID, 0, 0);
+  weatherBatteryIconLabel = createLabel(weatherPinBox, LV_SYMBOL_BATTERY_3, FONT_NORMAL, rgb(0x66D9A0));
+  lv_obj_align_to(weatherBatteryIconLabel, weatherBatteryLabel, LV_ALIGN_OUT_RIGHT_MID, 4, 0);
+
+  lv_obj_t *title = createLabel(weatherScreen, "WEATHER", &lv_font_montserrat_16, rgb(0x91D8FF));
+  lv_obj_align(title, LV_ALIGN_TOP_MID, 0, 34);
+
+  lv_obj_t *location = createLabel(weatherScreen, "HA NOI", &lv_font_montserrat_16, rgb(0xD0D8E3));
+  lv_obj_align(location, LV_ALIGN_TOP_MID, 0, 57);
+
+  lv_obj_t *temperatureCard = lv_obj_create(weatherScreen);
+  setObjectNoScroll(temperatureCard);
+  lv_obj_set_size(temperatureCard, 80, 56);
+  lv_obj_align(temperatureCard, LV_ALIGN_TOP_LEFT, 26, 86);
+  lv_obj_set_style_radius(temperatureCard, 12, 0);
+  lv_obj_set_style_bg_color(temperatureCard, rgb(0x25231F), 0);
+  lv_obj_set_style_border_width(temperatureCard, 1, 0);
+  lv_obj_set_style_border_color(temperatureCard, rgb(0xF5A742), 0);
+  lv_obj_set_style_pad_all(temperatureCard, 4, 0);
+  lv_obj_t *temperatureTitle = createLabel(temperatureCard, "TEMP", FONT_NORMAL, rgb(0xF5A742));
+  lv_obj_align(temperatureTitle, LV_ALIGN_TOP_MID, 0, 1);
+  weatherTemperatureLabel = createLabel(temperatureCard, "-- C", &lv_font_montserrat_16, rgb(0xFFD08A));
+  lv_obj_align(weatherTemperatureLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+  lv_obj_t *humidityCard = lv_obj_create(weatherScreen);
+  setObjectNoScroll(humidityCard);
+  lv_obj_set_size(humidityCard, 80, 56);
+  lv_obj_align(humidityCard, LV_ALIGN_TOP_RIGHT, -26, 86);
+  lv_obj_set_style_radius(humidityCard, 12, 0);
+  lv_obj_set_style_bg_color(humidityCard, rgb(0x142A32), 0);
+  lv_obj_set_style_border_width(humidityCard, 1, 0);
+  lv_obj_set_style_border_color(humidityCard, rgb(0x45C4D8), 0);
+  lv_obj_set_style_pad_all(humidityCard, 4, 0);
+  lv_obj_t *humidityTitle = createLabel(humidityCard, "HUMIDITY", FONT_NORMAL, rgb(0x45C4D8));
+  lv_obj_align(humidityTitle, LV_ALIGN_TOP_MID, 0, 1);
+  weatherHumidityLabel = createLabel(humidityCard, "--%", &lv_font_montserrat_16, rgb(0x8EDBFF));
+  lv_obj_align(weatherHumidityLabel, LV_ALIGN_BOTTOM_MID, 0, -2);
+
+  lv_obj_t *rainTitle = createLabel(weatherScreen, "RAINFALL", FONT_NORMAL, rgb(0x91A5C2));
+  lv_obj_align(rainTitle, LV_ALIGN_TOP_MID, 0, 169);
+  weatherRainLabel = createLabel(weatherScreen, "-- mm", &lv_font_montserrat_16, rgb(0x8EDBFF));
+  lv_obj_align(weatherRainLabel, LV_ALIGN_TOP_MID, 0, 188);
 }
 
 // ================== MAIN UI ==================
@@ -264,7 +389,7 @@ static void createWatchUi() {
   heartCard = lv_obj_create(screen);
   setObjectNoScroll(heartCard);
   lv_obj_set_size(heartCard, 160, 60);
-  lv_obj_align(heartCard, LV_ALIGN_TOP_MID, 0, 115);
+  lv_obj_align(heartCard, LV_ALIGN_TOP_MID, 0, 108);
   lv_obj_set_style_radius(heartCard, 12, 0);
   lv_obj_set_style_bg_color(heartCard, rgb(0x101826), 0);
   lv_obj_set_style_border_width(heartCard, 1, 0);
@@ -291,10 +416,25 @@ static void createWatchUi() {
   heartBpmLabel = createLabel(heartValCont, "bpm", &lv_font_montserrat_16, rgb(0xD0D8E3));
   lv_obj_set_style_pad_left(heartBpmLabel, 6, 0);
 
+  spo2Card = lv_obj_create(screen);
+  setObjectNoScroll(spo2Card);
+  lv_obj_set_size(spo2Card, 126, 27);
+  lv_obj_align(spo2Card, LV_ALIGN_TOP_MID, 0, 172);
+  lv_obj_set_style_radius(spo2Card, 12, 0);
+  lv_obj_set_style_bg_color(spo2Card, rgb(0x101826), 0);
+  lv_obj_set_style_border_width(spo2Card, 1, 0);
+  lv_obj_set_style_border_color(spo2Card, rgb(0x1F2A41), 0);
+  lv_obj_set_style_pad_all(spo2Card, 2, 0);
+  lv_obj_set_style_pad_column(spo2Card, 8, 0);
+  lv_obj_set_flex_flow(spo2Card, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(spo2Card, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  createLabel(spo2Card, "SpO2", FONT_NORMAL, rgb(0x91A5C2));
+  spo2Label = createLabel(spo2Card, "--%", &lv_font_montserrat_16, rgb(0xFFB84D));
+
   statusCard = lv_obj_create(screen);
   setObjectNoScroll(statusCard);
-  lv_obj_set_size(statusCard, 130, 28);
-  lv_obj_align(statusCard, LV_ALIGN_TOP_MID, 0, 182);
+  lv_obj_set_size(statusCard, 130, 22);
+  lv_obj_align(statusCard, LV_ALIGN_TOP_MID, 0, 203);
   lv_obj_set_style_radius(statusCard, 12, 0);
   lv_obj_set_style_bg_color(statusCard, rgb(0x101826), 0);
   lv_obj_set_style_border_width(statusCard, 1, 0);
@@ -310,6 +450,7 @@ static void createWatchUi() {
   lv_obj_set_style_text_font(statusIcon, &lv_font_montserrat_14, 0);
   statusLabel = createLabel(statusCard, "Normal", &lv_font_montserrat_14, rgb(0xFFFFFF));
 
+  createWeatherScreen(screen);
   createSosOverlay();
 }
 
@@ -327,18 +468,169 @@ static void updateStatusUi() {
   }
 }
 
-// ------------------------------ Battery logic (đã hiệu chỉnh) ------------------------------
-#define BATTERY_CALIBRATION 1.12f   // pin đầy hiển thị 100%
+static void weatherFetchTask(void *parameter) {
+  (void)parameter;
+  bool success = false;
+  float temperature = 0.0f;
+  float humidity = 0.0f;
+  float precipitation = 0.0f;
+
+  WiFiClientSecure client;
+  client.setInsecure();
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
+  String url = "https://api.open-meteo.com/v1/forecast?latitude=";
+  url += String(WEATHER_LATITUDE, 6);
+  url += "&longitude=";
+  url += String(WEATHER_LONGITUDE, 6);
+  url += "&current=temperature_2m,relative_humidity_2m,precipitation";
+  url += "&timezone=Asia%2FBangkok";
+
+  if (http.begin(client, url.c_str())) {
+    const int httpCode = http.GET();
+    if (httpCode == HTTP_CODE_OK) {
+      const String payload = http.getString();
+      StaticJsonDocument<1536> response;
+      const DeserializationError parseError = deserializeJson(response, payload);
+      JsonVariantConst current = response["current"];
+      if (parseError) {
+        Serial.printf("[Weather] JSON parse failed: %s; body length=%u; prefix=%s\n",
+                      parseError.c_str(), static_cast<unsigned>(payload.length()),
+                      payload.substring(0, 100).c_str());
+      } else if (current.is<JsonObjectConst>()) {
+        temperature = current["temperature_2m"] | NAN;
+        humidity = current["relative_humidity_2m"] | NAN;
+        precipitation = current["precipitation"] | NAN;
+        success = isfinite(temperature) && isfinite(humidity) && isfinite(precipitation);
+        if (!success) Serial.println("[Weather] Response is missing current weather values.");
+      } else {
+        Serial.println("[Weather] Response has no current weather object.");
+      }
+    } else if (httpCode < 0) {
+      Serial.printf("[Weather] HTTP request failed: %s (%d)\n",
+                    http.errorToString(httpCode).c_str(), httpCode);
+    } else {
+      Serial.printf("[Weather] API returned HTTP %d.\n", httpCode);
+    }
+    http.end();
+  } else {
+    Serial.println("[Weather] Could not initialize HTTPS request.");
+  }
+
+  portENTER_CRITICAL(&weatherMux);
+  if (success) {
+    weatherTemperature = temperature;
+    weatherHumidity = humidity;
+    weatherPrecipitation = precipitation;
+    weatherHasData = true;
+  }
+  weatherFetchFailed = !success;
+  ++weatherUiVersion;
+  weatherFetchInProgress = false;
+  portEXIT_CRITICAL(&weatherMux);
+  if (success) Serial.printf("[Weather] Updated: %.1f C, humidity=%.0f%%, rain=%.1f mm\n",
+                             temperature, humidity, precipitation);
+  else Serial.println("[Weather] Could not fetch current weather.");
+  vTaskDelete(nullptr);
+}
+
+static bool startWeatherFetch() {
+  if (WiFi.status() != WL_CONNECTED) return false;
+  portENTER_CRITICAL(&weatherMux);
+  if (weatherFetchInProgress) {
+    portEXIT_CRITICAL(&weatherMux);
+    return false;
+  }
+  weatherFetchInProgress = true;
+  portEXIT_CRITICAL(&weatherMux);
+
+  if (xTaskCreate(weatherFetchTask, "weatherFetch", 8192, nullptr, 1, nullptr) == pdPASS) {
+    return true;
+  }
+
+  portENTER_CRITICAL(&weatherMux);
+  weatherFetchInProgress = false;
+  weatherFetchFailed = true;
+  ++weatherUiVersion;
+  portEXIT_CRITICAL(&weatherMux);
+  Serial.println("[Weather] Could not start weather task.");
+  return false;
+}
+
+static void updateWeatherUi() {
+  static uint32_t lastRenderedVersion = UINT32_MAX;
+  bool hasData;
+  float temperature;
+  float humidity;
+  float precipitation;
+  uint32_t version;
+
+  portENTER_CRITICAL(&weatherMux);
+  hasData = weatherHasData;
+  temperature = weatherTemperature;
+  humidity = weatherHumidity;
+  precipitation = weatherPrecipitation;
+  version = weatherUiVersion;
+  portEXIT_CRITICAL(&weatherMux);
+
+  if (version == lastRenderedVersion) return;
+  lastRenderedVersion = version;
+
+  if (!hasData) {
+    lv_label_set_text(weatherTemperatureLabel, "-- C");
+    lv_label_set_text(weatherHumidityLabel, "--%");
+    lv_label_set_text(weatherRainLabel, "-- mm");
+    return;
+  }
+
+  String temperatureText = String(temperature, 1) + " C";
+  String humidityText = String(humidity, 0) + "%";
+  String rainText = String(precipitation, 1) + " mm";
+  lv_label_set_text(weatherTemperatureLabel, temperatureText.c_str());
+  lv_label_set_text(weatherHumidityLabel, humidityText.c_str());
+  lv_label_set_text(weatherRainLabel, rainText.c_str());
+}
+
+static void handleWatchGestures() {
+  uint8_t gesture = pendingWatchGesture;
+  pendingWatchGesture = NONE;
+  if (sosActive || !weatherScreen) return;
+
+  if (DISPLAY_ROTATION == 1) {
+    if (gesture == SWIPE_LEFT) gesture = SWIPE_RIGHT;
+    else if (gesture == SWIPE_RIGHT) gesture = SWIPE_LEFT;
+    else if (gesture == SWIPE_UP) gesture = SWIPE_DOWN;
+    else if (gesture == SWIPE_DOWN) gesture = SWIPE_UP;
+  }
+
+  if (gesture == SWIPE_LEFT || gesture == SWIPE_UP) {
+    lv_obj_clear_flag(weatherScreen, LV_OBJ_FLAG_HIDDEN);
+    updateWeatherUi();
+  } else if (gesture == SWIPE_RIGHT || gesture == SWIPE_DOWN) {
+    lv_obj_add_flag(weatherScreen, LV_OBJ_FLAG_HIDDEN);
+  }
+}
+
+// Battery divider ratio must match the resistor divider on the board.
+static constexpr float BATTERY_DIVIDER_RATIO = 3.0f;
 
 static float readBatteryVoltage() {
   constexpr int sampleCount = 24;
-  uint32_t sum = 0;
+  uint32_t sumMilliVolts = 0;
   for (int i = 0; i < sampleCount; ++i) {
-    sum += analogRead(PIN_BATTERY);
+    sumMilliVolts += analogReadMilliVolts(PIN_BATTERY);
     delayMicroseconds(250);
   }
-  const float raw = static_cast<float>(sum) / sampleCount;
-  return raw * (3.3f / 4095.0f) * 3.0f * BATTERY_CALIBRATION;
+  const float adcMilliVolts = static_cast<float>(sumMilliVolts) / sampleCount;
+  const float batteryVoltage = adcMilliVolts / 1000.0f * BATTERY_DIVIDER_RATIO;
+  static uint32_t lastBatteryDiagnostic = 0;
+  if (millis() - lastBatteryDiagnostic >= 15000UL) {
+    lastBatteryDiagnostic = millis();
+    Serial.printf("[BATTERY] ADC=%.0f mV divider=%.2f battery=%.2f V\n",
+                  adcMilliVolts, BATTERY_DIVIDER_RATIO, batteryVoltage);
+  }
+  return batteryVoltage;
 }
 
 static int batteryPercentFromVoltage(float voltage) {
@@ -375,22 +667,97 @@ static void updateBatteryUi() {
   const int percent = batteryPercentFromVoltage(filteredVoltage);
   currentBatteryPercent = percent;   // lưu lại để gửi khi có alert
   lv_arc_set_value(batteryArc, percent);
+  lv_arc_set_value(weatherBatteryArc, percent);
   lv_label_set_text_fmt(batteryLabel, "%d%%", percent);
-  if (isCharging) lv_label_set_text(batteryIconLabel, LV_SYMBOL_CHARGE);
-  else if (percent > 60) lv_label_set_text(batteryIconLabel, LV_SYMBOL_BATTERY_3);
-  else if (percent > 30) lv_label_set_text(batteryIconLabel, LV_SYMBOL_BATTERY_2);
-  else if (percent > 10) lv_label_set_text(batteryIconLabel, LV_SYMBOL_BATTERY_1);
-  else lv_label_set_text(batteryIconLabel, LV_SYMBOL_BATTERY_EMPTY);
+  lv_label_set_text_fmt(weatherBatteryLabel, "%d%%", percent);
+  const char *batteryIcon;
+  if (isCharging) batteryIcon = LV_SYMBOL_CHARGE;
+  else if (percent > 60) batteryIcon = LV_SYMBOL_BATTERY_3;
+  else if (percent > 30) batteryIcon = LV_SYMBOL_BATTERY_2;
+  else if (percent > 10) batteryIcon = LV_SYMBOL_BATTERY_1;
+  else batteryIcon = LV_SYMBOL_BATTERY_EMPTY;
+  lv_label_set_text(batteryIconLabel, batteryIcon);
+  lv_label_set_text(weatherBatteryIconLabel, batteryIcon);
   lv_color_t color = rgb(0x66D9A0);
   if (percent <= 15) color = rgb(0xFF4D5E);
   else if (percent <= 35) color = rgb(0xFFB84D);
   lv_obj_set_style_arc_color(batteryArc, color, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(weatherBatteryArc, color, LV_PART_INDICATOR);
   lv_obj_set_style_text_color(batteryLabel, color, 0);
+  lv_obj_set_style_text_color(batteryIconLabel, color, 0);
+  lv_obj_set_style_text_color(weatherBatteryLabel, color, 0);
+  lv_obj_set_style_text_color(weatherBatteryIconLabel, color, 0);
 }
 
 // ------------------------------ Clock (ĐÃ SỬA) ------------------------------
 static time_t compileTimestampUTC = 0;   // UTC timestamp lúc biên dịch
 static bool ntpAvailable = false;
+static portMUX_TYPE telemetryPostMux = portMUX_INITIALIZER_UNLOCKED;
+static bool telemetryPostInProgress = false;
+
+static time_t currentUtcTime() {
+  if (!clockValid) return 0;
+  return clockBaseUtc + static_cast<time_t>((millis() - clockBaseMillis) / 1000UL);
+}
+
+static void saveClockCheckpoint() {
+  const uint32_t checkpointMillis = millis();
+  const time_t epoch = clockValid
+      ? clockBaseUtc + static_cast<time_t>((checkpointMillis - clockBaseMillis) / 1000UL)
+      : 0;
+  if (epoch < MIN_VALID_EPOCH) return;
+
+  clockBaseUtc = epoch;
+  clockBaseMillis = checkpointMillis;
+  preferences.begin("clock", false);
+  preferences.putULong64("epoch", static_cast<uint64_t>(epoch));
+  preferences.end();
+  lastClockCheckpointMs = checkpointMillis;
+}
+
+static bool restoreClockCheckpoint() {
+  preferences.begin("clock", true);
+  const uint64_t savedEpoch = preferences.getULong64("epoch", 0);
+  preferences.end();
+  if (savedEpoch < static_cast<uint64_t>(MIN_VALID_EPOCH)) return false;
+
+  clockBaseUtc = static_cast<time_t>(savedEpoch);
+  clockBaseMillis = millis();
+  lastClockCheckpointMs = clockBaseMillis;
+  clockValid = true;
+  Serial.println("Restored offline clock checkpoint.");
+  return true;
+}
+
+static bool syncTimeFromNtp(bool forceUpdate) {
+  if (WiFi.status() != WL_CONNECTED) return false;
+
+  const bool firstSyncAfterConnect = !ntpAvailable;
+  const bool updated = forceUpdate ? timeClient.forceUpdate() : timeClient.update();
+  if (!updated) return false;
+
+  const time_t epoch = timeClient.getEpochTime();
+  if (epoch < MIN_VALID_EPOCH) return false;
+
+  clockBaseUtc = epoch;
+  clockBaseMillis = millis();
+  clockValid = true;
+  ntpAvailable = true;
+  if (firstSyncAfterConnect || millis() - lastClockCheckpointMs >= CLOCK_CHECKPOINT_INTERVAL_MS) {
+    saveClockCheckpoint();
+  }
+  const time_t localEpoch = epoch + GMT_OFFSET_SECONDS;
+  struct tm utcTime;
+  struct tm localTime;
+  char utcText[24];
+  char localText[24];
+  gmtime_r(&epoch, &utcTime);
+  gmtime_r(&localEpoch, &localTime);
+  strftime(utcText, sizeof(utcText), "%Y-%m-%d %H:%M:%S", &utcTime);
+  strftime(localText, sizeof(localText), "%Y-%m-%d %H:%M:%S", &localTime);
+  Serial.printf("NTP synchronized: UTC=%s local(UTC+7)=%s\n", utcText, localText);
+  return true;
+}
 
 // ================== HÀM TÍNH EPOCH THỦ CÔNG ==================
 static time_t dateTimeToEpoch(int year, int month, int day, int hour, int minute, int second) {
@@ -422,15 +789,13 @@ static void parseCompileTime() {
 }
 
 static void updateClockUi() {
-  time_t localTime;
-  if (ntpAvailable) {
-    time_t nowUTC = timeClient.getEpochTime();     // giây UTC
-    localTime = nowUTC + GMT_OFFSET_SECONDS;       // giờ địa phương (UTC+7)
-  } else {
-    // fallback: compileTimestampUTC (UTC) + millis() + offset
-    localTime = compileTimestampUTC + (millis() / 1000) + GMT_OFFSET_SECONDS;
+  if (!clockValid) {
+    lv_label_set_text(timeLabel, "--:--");
+    lv_label_set_text(dateLabel, "Chua dong bo");
+    return;
   }
 
+  const time_t localTime = currentUtcTime() + GMT_OFFSET_SECONDS;
   struct tm now_tm;
   gmtime_r(&localTime, &now_tm);
 
@@ -461,19 +826,28 @@ static void updateHeartRateUi() {
   } else {
     lv_label_set_text_fmt(heartRateLabel, "%d", (int)bpm);
     lv_obj_set_style_text_color(heartIcon, rgb(0xFF4D73), 0);
-    lv_obj_set_style_text_color(heartRateLabel, rgb(0xFFFFFF), 0);
-    lv_obj_set_style_text_color(heartBpmLabel, rgb(0xD0D8E3), 0);
+    lv_obj_set_style_text_color(heartRateLabel, rgb(0xFF4D73), 0);
+    lv_obj_set_style_text_color(heartBpmLabel, rgb(0xFF9CAD), 0);
+  }
+}
+
+static void updateSpO2Ui() {
+  if (!is_finger_detected()) {
+    lv_label_set_text(spo2Label, "--%");
+    lv_obj_set_style_text_color(spo2Label, rgb(0x666666), 0);
+  } else if (!is_spo2_valid()) {
+    lv_label_set_text(spo2Label, "--%");
+    lv_obj_set_style_text_color(spo2Label, rgb(0xFFB84D), 0);
+  } else {
+    lv_label_set_text_fmt(spo2Label, "%d%%", get_spo2());
+    lv_obj_set_style_text_color(spo2Label, rgb(0x66D9A0), 0);
   }
 }
 
 // ================== HÀM GỬI ALERT LÊN SERVER ==================
 static String getCurrentTimeISO8601() {
-  time_t nowUTC;
-  if (ntpAvailable) {
-    nowUTC = timeClient.getEpochTime();
-  } else {
-    nowUTC = compileTimestampUTC + (millis() / 1000);
-  }
+  if (!clockValid) return String();
+  const time_t nowUTC = currentUtcTime();
   struct tm t;
   gmtime_r(&nowUTC, &t);
   char buf[25];
@@ -483,17 +857,116 @@ static String getCurrentTimeISO8601() {
   return String(buf);
 }
 
-static void sendAlertToServer(float confidence) {
+struct TelemetryPostRequest {
+  String url;
+  String body;
+};
+
+static void telemetryPostTask(void *parameter) {
+  TelemetryPostRequest *request = static_cast<TelemetryPostRequest *>(parameter);
+  HTTPClient http;
+  http.setConnectTimeout(5000);
+  http.setTimeout(5000);
+  int httpCode = -1;
+  String responseBody;
+  if (http.begin(request->url)) {
+    http.addHeader("Content-Type", "application/json");
+    http.addHeader("X-Device-Id", DEVICE_ID);
+    httpCode = http.POST(request->body);
+    if (httpCode > 0) responseBody = http.getString();
+    http.end();
+  }
+  if (httpCode < 0) {
+    const String error = http.errorToString(httpCode);
+    Serial.printf("Telemetry POST to %s failed: code=%d, error=%s\n",
+                  request->url.c_str(), httpCode, error.c_str());
+  } else if (httpCode < 200 || httpCode >= 300) {
+    Serial.printf("Telemetry POST to %s rejected: HTTP %d, response: %s\n",
+                  request->url.c_str(), httpCode, responseBody.c_str());
+  } else {
+    StaticJsonDocument<64> filter;
+    filter["appliedToCurrentState"] = true;
+    filter["message"] = true;
+    StaticJsonDocument<128> response;
+    const DeserializationError parseError = deserializeJson(
+        response, responseBody, DeserializationOption::Filter(filter));
+    if (parseError) {
+      Serial.printf("Telemetry POST to %s received HTTP %d; could not parse response: %s\n",
+                    request->url.c_str(), httpCode, parseError.c_str());
+    } else {
+      const bool applied = response["appliedToCurrentState"] | false;
+      const char *message = response["message"] | "";
+      Serial.printf("Telemetry POST to %s received HTTP %d; appliedToCurrentState=%s; message=%s\n",
+                    request->url.c_str(), httpCode, applied ? "true" : "false",
+                    message[0] ? message : "(none)");
+    }
+  }
+  delete request;
+  portENTER_CRITICAL(&telemetryPostMux);
+  telemetryPostInProgress = false;
+  portEXIT_CRITICAL(&telemetryPostMux);
+  vTaskDelete(nullptr);
+}
+
+static void sendPeriodicTelemetry() {
+  if (WiFi.status() != WL_CONNECTED || backendUrl.isEmpty()) return;
+
+  StaticJsonDocument<256> doc;
+  doc["deviceId"] = DEVICE_ID;
+  if (is_finger_detected() && get_bpm() >= 1) {
+    doc["heartRate"] = static_cast<int>(lroundf(get_bpm()));
+  } else {
+    doc["heartRate"] = nullptr;
+  }
+  if (is_spo2_valid()) {
+    doc["spo2"] = get_spo2();
+  } else {
+    doc["spo2"] = nullptr;
+  }
+  doc["battery"] = currentBatteryPercent;
+  doc["connectionStatus"] = "good";
+  doc["rssi"] = WiFi.RSSI();
+  doc["fallStatus"] = "normal";
+
+  String body;
+  serializeJson(doc, body);
+  TelemetryPostRequest *request = new (std::nothrow) TelemetryPostRequest;
+  if (!request) {
+    Serial.println("Could not allocate telemetry request.");
+    return;
+  }
+  request->url = backendUrl + "/api/telemetry";
+  request->body = body;
+
+  portENTER_CRITICAL(&telemetryPostMux);
+  const bool alreadyRunning = telemetryPostInProgress;
+  if (!alreadyRunning) telemetryPostInProgress = true;
+  portEXIT_CRITICAL(&telemetryPostMux);
+  if (alreadyRunning) {
+    delete request;
+    return;
+  }
+
+  if (xTaskCreate(telemetryPostTask, "telemetryPost", 6144, request, 1, nullptr) != pdPASS) {
+    delete request;
+    portENTER_CRITICAL(&telemetryPostMux);
+    telemetryPostInProgress = false;
+    portEXIT_CRITICAL(&telemetryPostMux);
+    Serial.println("Could not start telemetry task.");
+  }
+}
+
+static bool sendAlertToServer(float confidence) {
   if (backendUrl.length() == 0) {
     Serial.println("No backend configured, cannot send alert.");
-    return;
+    return false;
   }
 
   HTTPClient http;
   String url = backendUrl + "/alert";
   http.begin(url);
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Device-Id", "SW-0005");
+  http.addHeader("X-Device-Id", DEVICE_ID);
 
   float ax, ay, az, gx, gy, gz;
   get_filtered_data(ax, ay, az, gx, gy, gz);
@@ -509,6 +982,8 @@ if (is_finger_detected()) {
 } else {
     doc["heart_rate"] = nullptr;            // gửi null (JSON null)
 }
+  if (is_spo2_valid()) doc["spo2"] = get_spo2();
+  else doc["spo2"] = nullptr;
   doc["battery"] = currentBatteryPercent;
   doc["rssi"] = currentWiFiRSSI;
   JsonObject accel = doc.createNestedObject("accel");
@@ -525,6 +1000,7 @@ if (is_finger_detected()) {
 
   Serial.println("Sending alert: " + jsonStr);
   int httpCode = http.POST(jsonStr);
+  const bool delivered = httpCode >= 200 && httpCode < 300;
 
   if (httpCode > 0) {
     String response = http.getString();
@@ -533,6 +1009,7 @@ if (is_finger_detected()) {
     Serial.printf("Alert send failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
   http.end();
+  return delivered;
 }
 
 // ================== AI FALL DETECTION ==================
@@ -636,9 +1113,11 @@ static void handleFallDetection() {
       sosCountdown--;
       if (sosCountdown >= 0) lv_label_set_text_fmt(countdownLabel, "%d", sosCountdown);
       if (sosCountdown <= 0) {
-        Serial.println("SOS countdown finished, sending emergency alert.");
-        sendAlertToServer(lastFallScore);
-        dismissSOS();
+        Serial.println("SOS countdown complete; sending emergency alert.");
+        const bool delivered = sendAlertToServer(lastFallScore);
+        Serial.printf("SOS countdown completed; alert HTTP request %s.\n",
+                      delivered ? "succeeded" : "failed");
+        closeSOSOverlay();
       }
     }
   }
@@ -781,11 +1260,23 @@ bool loadWiFiCredentials(String &ssid, String &pass) {
 bool connectToWiFi() {
   String ssid, pass;
   if (!loadWiFiCredentials(ssid, pass)) return false;
-  WiFi.mode(WIFI_STA); WiFi.begin(ssid.c_str(), pass.c_str());
+  WiFi.begin(ssid.c_str(), pass.c_str());
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 15000) delay(200);
   return WiFi.status() == WL_CONNECTED;
 }
+
+static bool startSetupAccessPoint() {
+  const bool started = WiFi.softAP("ESP32-Watch", nullptr, 6, 0, 4);
+  if (started) {
+    Serial.print("Setup AP active: ESP32-Watch, IP: ");
+    Serial.println(WiFi.softAPIP());
+  } else {
+    Serial.println("ERROR: Could not start setup AP.");
+  }
+  return started;
+}
+
 void setupWebServer() {
   server.on("/", handleRoot);
   server.on("/save", handleSave);
@@ -808,11 +1299,11 @@ void setup() {
 
   lv_init();
   pinMode(PIN_BACKLIGHT, OUTPUT); digitalWrite(PIN_BACKLIGHT, HIGH);
-  tft.begin(); tft.setRotation(0);
+  tft.begin(); tft.setRotation(DISPLAY_ROTATION);
   touch.begin();
 
   imu_init();
-  init_max30102();
+  max30102Available = init_max30102();
 
   if (!init_fall_model()) {
     Serial.println("Failed to init fall model! Halted.");
@@ -840,37 +1331,79 @@ void setup() {
   indev_drv.read_cb = my_touchpad_read;
   lv_indev_drv_register(&indev_drv);
 
-  parseCompileTime();  // lấy thời gian biên dịch (UTC)
+  parseCompileTime();
+  clockBaseUtc = compileTimestampUTC;
+  clockBaseMillis = millis();
+  clockValid = compileTimestampUTC >= MIN_VALID_EPOCH;
+  const bool restoredClock = restoreClockCheckpoint();
 
   loadBackendConfig();
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.setAutoReconnect(true);
+  WiFi.setSleep(false);
+  startSetupAccessPoint();
+  timeClient.begin();
+
   if (connectToWiFi()) {
-    Serial.println("Watch mode - WiFi connected.");
-    timeClient.begin();
-    if (timeClient.update()) {
-      ntpAvailable = true;
-      Serial.println("NTP time synchronized.");
-    }
+    Serial.print("WiFi connected, IP: ");
+    Serial.println(WiFi.localIP());
+    syncTimeFromNtp(true);
   } else {
-    WiFi.mode(WIFI_AP); WiFi.softAP("ESP32-Watch");
-    Serial.println("AP Mode started. Using local time.");
+    WiFi.setAutoReconnect(false);
+    WiFi.mode(WIFI_AP);
+    delay(100);
+    Serial.println("Router unavailable; switching to AP-only mode.");
+    startSetupAccessPoint();
     ntpAvailable = false;
   }
+  if (!restoredClock && !ntpAvailable && clockValid) saveClockCheckpoint();
   setupWebServer();
 
   createWatchUi();
+  updateWeatherUi();
   updateBatteryUi();
   updateClockUi();
   updateHeartRateUi();
+  updateSpO2Ui();
   updateStatusUi();
 }
 
 void loop() {
   static uint32_t lastLvglTickMs = millis();
+  static uint32_t lastTelemetryMs = 0;
+  static uint32_t lastWeatherFetchMs = 0;
   static uint32_t lastImuMs = 0, lastUiMs = 0, lastClockMs = 0, lastBatteryMs = 0;
   uint32_t now = millis();
 
   server.handleClient();
-  if (ntpAvailable) timeClient.update(); // chỉ cập nhật NTP khi có WiFi
+  if (WiFi.status() == WL_CONNECTED) {
+    if (ntpAvailable) {
+      syncTimeFromNtp(false);
+    } else if (now - lastNtpAttemptMs >= 30000UL) {
+      lastNtpAttemptMs = now;
+      syncTimeFromNtp(true);
+    }
+  } else {
+    ntpAvailable = false;
+  }
+  if (clockValid && now - lastClockCheckpointMs >= CLOCK_CHECKPOINT_INTERVAL_MS) {
+    saveClockCheckpoint();
+  }
+  if (WiFi.status() == WL_CONNECTED &&
+      (lastTelemetryMs == 0 || now - lastTelemetryMs >= TELEMETRY_INTERVAL_MS)) {
+    lastTelemetryMs = now;
+    sendPeriodicTelemetry();
+  }
+  bool retryWeatherSoon;
+  portENTER_CRITICAL(&weatherMux);
+  retryWeatherSoon = weatherFetchFailed;
+  portEXIT_CRITICAL(&weatherMux);
+  const uint32_t weatherInterval = retryWeatherSoon ? 60000UL : WEATHER_UPDATE_INTERVAL_MS;
+  if (WiFi.status() == WL_CONNECTED &&
+      (lastWeatherFetchMs == 0 || now - lastWeatherFetchMs >= weatherInterval)) {
+    lastWeatherFetchMs = now ? now : 1;
+    startWeatherFetch();
+  }
 
   uint32_t elapsed = now - lastLvglTickMs;
   if (elapsed > 0) { lv_tick_inc(elapsed); lastLvglTickMs = now; }
@@ -878,11 +1411,17 @@ void loop() {
   if (now - lastImuMs >= 20) { lastImuMs = now; imu_update(); }
 
   handleFallDetection();
+  static unsigned long lastMax30102Retry = 0;
+  if (!max30102Available && now - lastMax30102Retry >= 5000UL) {
+    lastMax30102Retry = now;
+    max30102Available = init_max30102();
+  }
   update_max30102();
 
   if (now - lastUiMs >= 250) {
     lastUiMs = now;
     updateHeartRateUi();
+    updateSpO2Ui();
     updateStatusUi();
   }
 
@@ -890,12 +1429,13 @@ void loop() {
   if (now - lastBatteryMs >= 3000) { lastBatteryMs = now; updateBatteryUi(); }
 
   lv_timer_handler();
+  handleWatchGestures();
+  updateWeatherUi();
   // Cập nhật RSSI mỗi 5 giây
 static unsigned long lastRSSIUpdate = 0;
-if (ntpAvailable && now - lastRSSIUpdate > 5000) {
+if (now - lastRSSIUpdate > 5000) {
   lastRSSIUpdate = now;
-  currentWiFiRSSI = WiFi.RSSI();
+  currentWiFiRSSI = WiFi.status() == WL_CONNECTED ? WiFi.RSSI() : -100;
 }
-currentWiFiRSSI = ntpAvailable ? WiFi.RSSI() : -100;
   delay(5);
 }

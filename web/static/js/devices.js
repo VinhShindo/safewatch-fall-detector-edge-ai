@@ -20,6 +20,7 @@
         <td>${badge(d.status)}</td>
         <td class="battery-${d.battery <= 20 ? 'low' : 'good'}"><i class="bi bi-battery-half"></i> ${d.battery}%</td>
         <td class="${d.heartRate > 100 ? 'heart-high' : 'heart-good'}"><i class="bi bi-heart-fill"></i> ${bpm(d.heartRate)}</td>
+        <td>${d.spo2 != null ? `${d.spo2}%` : '—'}</td>
         <td>${time(d.lastUpdated)}<span class="cell-sub">${date(d.lastUpdated)}</span></td>
         <td><button class="btn-outline-sw small" data-view="${esc(d.id)}"><i class="bi bi-eye"></i></button></td>
       </tr>`;
@@ -31,7 +32,7 @@
     selected = id;
     $('#deviceDetails').innerHTML = `
       <div class="detail-title"><h2>Chi tiết thiết bị</h2><button class="icon-button" data-close-details><i class="bi bi-x-lg"></i></button></div>
-      <div class="watch-visual">10<br>08<small>SAFEWATCH</small></div>
+      <div class="watch-visual">10<br>08<small>SeSide</small></div>
       <div class="detail-identity">
         <h3>${esc(d.id)}</h3>${badge(d.status)}
         <p>${esc(d.wearerName)}</p>
@@ -40,6 +41,7 @@
       <div class="detail-stats">
         <div class="detail-stat"><i class="bi bi-battery-half"></i><span>Pin</span><strong class="battery-${d.battery <= 20 ? 'low' : 'good'}">${d.battery}%</strong></div>
         <div class="detail-stat"><i class="bi bi-heart-fill"></i><span>Nhịp tim hiện tại</span><strong class="${d.heartRate > 100 ? 'heart-high' : 'heart-good'}">${bpm(d.heartRate, '—')}</strong></div>
+        <div class="detail-stat"><i class="bi bi-droplet-half"></i><span>SpO₂ ước tính</span><strong>${d.spo2 != null ? `${d.spo2}%` : '—'}</strong></div>
         <div class="detail-stat"><i class="bi bi-reception-4"></i><span>Chất lượng kết nối</span><strong>${esc(label(d.connectionStatus))}</strong></div>
         <div class="detail-stat"><i class="bi bi-cpu"></i><span>Phiên bản phần mềm</span><strong>${esc(d.firmwareVersion)}</strong></div>
       </div>

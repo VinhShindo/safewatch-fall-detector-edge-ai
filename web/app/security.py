@@ -186,6 +186,31 @@ def current_user(request: Request) -> dict:
     return session
 
 
+def admin_user(request: Request) -> dict:
+    session = current_user(request)
+    if session.get("role", "admin") != "admin":
+        raise HTTPException(status_code=403, detail="Chức năng này chỉ dành cho quản trị viên.")
+    return session
+
+
+def portal_user(request: Request, role: str | None = None) -> dict:
+    session = current_user(request)
+    actual_role = session.get("role", "admin")
+    if actual_role not in {"family", "facility"} or (role and actual_role != role):
+        raise HTTPException(status_code=403, detail="Tài khoản không có quyền truy cập portal này.")
+    account = request.app.state.service.authenticate_portal_account(session.get("user", ""))
+    if (
+        account is None
+        or account.id != session.get("portal_account_id")
+        or account.role != actual_role
+        or account.resident_id != session.get("resident_id")
+        or account.facility_id != session.get("facility_id")
+    ):
+        session.clear()
+        raise LoginRequired()
+    return session
+
+
 def verify_csrf(request: Request) -> None:
     """Dependency cho API thay đổi dữ liệu: header X-CSRF-Token phải khớp token trong phiên."""
     if request.method in {"GET", "HEAD", "OPTIONS", "TRACE"}:

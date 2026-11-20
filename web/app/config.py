@@ -79,6 +79,10 @@ class Settings:
     supabase_publishable_key: str = ""
     supabase_secret_key: str = ""
     supabase_jwks_url: str = ""
+    support_name: str = ""
+    support_phone: str = ""
+    support_email: str = ""
+    support_hours: str = ""
 
     # Tài khoản quản trị
     admin_username: str = ""
@@ -133,6 +137,10 @@ class Settings:
             supabase_publishable_key=_str("SUPABASE_PUBLISHABLE_KEY"),
             supabase_secret_key=_str("SUPABASE_SECRET_KEY"),
             supabase_jwks_url=_str("SUPABASE_JWKS_URL"),
+            support_name=_str("SUPPORT_NAME"),
+            support_phone=_str("SUPPORT_PHONE"),
+            support_email=_str("SUPPORT_EMAIL"),
+            support_hours=_str("SUPPORT_HOURS"),
             admin_username=_str("ADMIN_USERNAME"),
             admin_password_hash=_str("ADMIN_PASSWORD_HASH"),
             admin_staff_id=_str("ADMIN_STAFF_ID", "STAFF-001"),

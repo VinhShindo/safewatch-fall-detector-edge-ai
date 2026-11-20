@@ -34,6 +34,7 @@ class DeviceInput(ApiInput):
     room_id: str | None = None
     battery: int | None = None
     heart_rate: int | None = None
+    spo2: int | None = Field(default=None, ge=0, le=100)
     status: str | None = None
     firmware_version: str | None = None
     patient_name: str | None = None
@@ -63,6 +64,18 @@ class FacilityInput(ApiInput):
     name: str = ""
     address: str = ""
     phone: str = ""
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+
+
+class FacilityLocationInput(ApiInput):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+
+
+class DeviceLocationInput(ApiInput):
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
 
 
 class StaffInput(ApiInput):
@@ -81,9 +94,30 @@ class TelegramConfigInput(ApiInput):
     chat_id: str = ""
 
 
+class SupportConfigInput(ApiInput):
+    name: str = ""
+    phone: str = ""
+    email: str = ""
+    hours: str = ""
+
+
+class PortalAccountInput(ApiInput):
+    username: str = ""
+    password: str = ""
+    role: str = "family"
+    resident_id: str | None = None
+    facility_id: str | None = None
+    staff_id: str | None = None
+
+
+class PortalAccountStatusInput(ApiInput):
+    active: bool
+
+
 class TelemetryInput(ApiInput):
     device_id: str = ""
     heart_rate: int | None = None
+    spo2: int | None = Field(default=None, ge=0, le=100)
     battery: int | None = None
     fall_status: str | None = None
     fall_probability: float | None = None
@@ -97,6 +131,8 @@ class TelemetryInput(ApiInput):
     gyro_x: float | None = None
     gyro_y: float | None = None
     gyro_z: float | None = None
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
 
 
 class AlertActionInput(ApiInput):
@@ -123,6 +159,7 @@ class Esp32AlertInput(BaseModel):
     type: str = ""
     confidence: float | None = None
     heart_rate: int | None = Field(default=None)
+    spo2: int | None = Field(default=None, ge=0, le=100)
     battery: int | None = None
     rssi: int | None = None
     accel: Esp32Accel | None = None

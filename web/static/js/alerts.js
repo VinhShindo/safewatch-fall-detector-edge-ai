@@ -28,6 +28,9 @@
     selected = id;
     const a = d.alert;
     const heart = d.device?.heartRate;
+    const latitude = a.latitude ?? d.device?.latitude;
+    const longitude = a.longitude ?? d.device?.longitude;
+    const hasLaptopLocation = latitude != null && longitude != null;
     const statusKind = a.status === 'closed' ? 'active' : a.status === 'acknowledged' ? 'info' : 'high';
 
     $('#alertDetails').innerHTML = `
@@ -49,7 +52,9 @@
         <div><span>Nhịp tim gần nhất</span><strong class="heart-high">${SW.bpm(heart, '—')}</strong></div>
         <div><span>Pin đồng hồ</span><strong class="battery-low">${d.device?.battery ?? '—'}${d.device ? '%' : ''}</strong></div>
         <div><span>Kết nối</span><strong>${esc(label(d.device?.connectionStatus))}</strong></div>
-        <div><span>Vị trí ước tính</span><strong>${esc(a.roomName)} - ${esc(a.facilityName)}</strong></div>
+        <div><span>Vị trí laptop tại lúc cảnh báo</span><strong>${hasLaptopLocation
+          ? `<a href="https://www.google.com/maps?q=${encodeURIComponent(latitude)},${encodeURIComponent(longitude)}&t=k" target="_blank" rel="noopener noreferrer">${Number(latitude).toFixed(6)}, ${Number(longitude).toFixed(6)} <i class="bi bi-box-arrow-up-right"></i></a>`
+          : 'Chưa có vị trí laptop'}</strong></div>
       </div>
       <div class="alert-actions">
         <button class="btn-primary-sw" data-act="acknowledge"><i class="bi bi-check-lg"></i>Xác nhận đã xem</button>
@@ -69,7 +74,7 @@
         try {
           await SW.api(`/api/alerts/${encodeURIComponent(a.id)}/${button.dataset.act}`, {
             method: 'POST',
-            body: JSON.stringify({ note: 'Thao tác từ SafeWatch Admin' }),
+            body: JSON.stringify({ note: 'Thao tác từ SeSide Admin' }),
           });
           SW.toast('Đã cập nhật cảnh báo', label(button.dataset.act));
           await load();

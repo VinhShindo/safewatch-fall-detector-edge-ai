@@ -1,10 +1,11 @@
 """Gửi cảnh báo qua Telegram Bot API."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import httpx
 
@@ -26,6 +27,30 @@ class AlertNotification:
     resident_name: str
     location: str
     event_at_utc: datetime
+    device_id: str = ""
+    latitude: float | None = None
+    longitude: float | None = None
+    location_updated_at_utc: datetime | None = None
+    heart_rate: int | None = None
+    spo2: int | None = None
+    battery: int | None = None
+    fall_probability: float | None = None
+    rssi: int | None = None
+    accel_x: float | None = None
+    accel_y: float | None = None
+    accel_z: float | None = None
+    gyro_x: float | None = None
+    gyro_y: float | None = None
+    gyro_z: float | None = None
+
+
+_VIETNAM_TZ = timezone(timedelta(hours=7), name="UTC+07:00")
+
+
+def _vietnam_time(value: datetime) -> str:
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(_VIETNAM_TZ).strftime("%H:%M:%S %d/%m/%Y")
 
 
 class TelegramNotifier:
@@ -36,6 +61,8 @@ class TelegramNotifier:
         self._client = httpx.AsyncClient(timeout=10)
         self._last_test_at: datetime | None = None
         self._last_status: str | None = None
+        self._last_notification_at: datetime | None = None
+        self._last_notification_status: str | None = None
         self._last_update_id = 0
         self._messages: deque[dict] = deque(maxlen=100)
 
@@ -64,21 +91,37 @@ class TelegramNotifier:
             "hasChatId": bool(self._chat_id),
             "lastStatus": self._last_status,
             "lastTestAtUtc": iso(self._last_test_at),
+            "lastNotificationStatus": self._last_notification_status,
+            "lastNotificationAtUtc": iso(self._last_notification_at),
         }
 
     # ---- gửi tin --------------------------------------------------------------
     async def notify_alert(self, n: AlertNotification) -> dict:
+        severity = {
+            "high": "Cao",
+            "medium": "Trung bình",
+            "low": "Thấp",
+        }.get(n.severity.lower(), n.severity)
         text = (
-            f"🚨 SafeWatch {n.severity.upper()}\n"
-            f"{n.message}\n"
-            f"Người dùng: {n.resident_name}\n"
-            f"Vị trí: {n.location}\n"
-            f"Thời gian UTC: {n.event_at_utc:%H:%M %d/%m/%Y}"
+            "🚨 SeSide cảnh báo té ngã\n"
+            f"Phát hiện người nhà {n.resident_name} bị té ngã, mức độ {severity}\n"
+            f"Nhịp tim: {n.heart_rate if n.heart_rate is not None else '—'} bpm · "
+            f"SpO₂: {f'{n.spo2}%' if n.spo2 is not None else '—'} · "
+            f"Pin: {f'{n.battery}%' if n.battery is not None else '—'}\n"
+            f"Phát hiện lúc: {_vietnam_time(n.event_at_utc)}"
         )
+        location = n.location.strip() or "Chưa xác định được địa chỉ"
+        if n.latitude is not None and n.longitude is not None:
+            text += (
+                f"\nVị trí phát hiện: Trường Đại Học Đại Nam, Phú Lương, Hà Nội, Việt Nam"
+                f"\nBản đồ: https://maps.google.com/?q={n.latitude:.6f},{n.longitude:.6f}"
+            )
+        else:
+            text += f"\nVị trí phát hiện: Trường Đại Học Đại Nam, Phú Lương, Hà Nội, Việt Nam"
         return await self._send(text, is_test=False)
 
     async def test(self) -> dict:
-        return await self._send("✅ SafeWatch Admin đã kết nối Telegram thành công.", is_test=True)
+        return await self._send("✅ SeSide Admin đã kết nối Telegram thành công.", is_test=True)
 
     async def _send(self, text: str, is_test: bool) -> dict:
         at = utcnow()
@@ -88,18 +131,47 @@ class TelegramNotifier:
             self._remember(is_test, at, message)
             return {"success": False, "configured": False, "message": message, "atUtc": iso(at)}
 
-        try:
-            response = await self._client.post(
-                f"https://api.telegram.org/bot{self._token}/sendMessage",
-                json={"chat_id": self._chat_id, "text": text},
-            )
-            success = response.is_success
-            message = "Đã gửi Telegram." if success else f"Telegram trả về HTTP {response.status_code}."
+        for attempt in range(1, 4):
+            try:
+                response = await self._client.post(
+                    f"https://api.telegram.org/bot{self._token}/sendMessage",
+                    json={"chat_id": self._chat_id, "text": text},
+                )
+            except httpx.ConnectTimeout:
+                if attempt < 3:
+                    log.warning(
+                        "Telegram ConnectTimeout khi kết nối Bot API (lần %d/3); sẽ thử lại.",
+                        attempt,
+                    )
+                    await asyncio.sleep(0.5 * attempt)
+                    continue
+                success = False
+                message = (
+                    "Hết thời gian kết nối Telegram Bot API sau 3 lần thử. "
+                    "Kiểm tra mạng ra Internet, DNS hoặc tường lửa của máy chủ."
+                )
+                log.warning("Telegram ConnectTimeout sau 3 lần thử; chưa kết nối được Bot API.")
+                break
+            except httpx.HTTPError as exc:
+                # Không log exc vì URL của httpx chứa bot token.
+                success = False
+                message = "Không thể kết nối Telegram Bot API."
+                log.warning("Telegram lỗi kết nối: %s", type(exc).__name__)
+                break
+
+            try:
+                result = response.json()
+            except ValueError:
+                result = {}
+            success = response.is_success and isinstance(result, dict) and result.get("ok") is True
+            if success:
+                message = "Đã gửi Telegram."
+            elif response.is_success:
+                message = "Telegram API không xác nhận đã gửi tin nhắn."
+            else:
+                message = f"Telegram trả về HTTP {response.status_code}."
             log.info("Telegram %s: status=%s, is_test=%s", "thành công" if success else "thất bại", response.status_code, is_test)
-        except httpx.HTTPError as exc:
-            # Không log exc vì URL của httpx chứa bot token.
-            success, message = False, "Không thể kết nối Telegram Bot API."
-            log.warning("Telegram lỗi kết nối: %s", type(exc).__name__)
+            break
         self._remember(is_test, at, message)
         return {"success": success, "configured": True, "message": message, "atUtc": iso(at)}
 
@@ -107,6 +179,9 @@ class TelegramNotifier:
         if is_test:
             self._last_test_at = at
             self._last_status = message
+        else:
+            self._last_notification_at = at
+            self._last_notification_status = message
 
     # ---- đọc tin nhắn bot nhận được ---------------------------------------------
     async def get_messages(self) -> list[dict]:

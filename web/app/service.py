@@ -8,6 +8,7 @@ import math
 import re
 import threading
 import uuid
+from dataclasses import replace
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Iterable, TypeVar
@@ -27,6 +28,7 @@ from .models import (
     Facility,
     FallStatus,
     NotFoundError,
+    PortalAccount,
     Resident,
     Staff,
     Telemetry,
@@ -35,9 +37,10 @@ from .models import (
     utcnow,
 )
 from .realtime import RealtimeHub
-from .schemas import DeviceInput, FacilityInput, StaffInput, TelemetryInput, UserInput
+from .schemas import DeviceInput, FacilityInput, PortalAccountInput, StaffInput, TelemetryInput, UserInput
 from .storage import Context, Repository
 from .telegram import AlertNotification, TelegramNotifier
+from .security import hash_password
 
 log = logging.getLogger("safewatch.service")
 T = TypeVar("T")
@@ -104,13 +107,17 @@ def map_device(device: Device, ctx: Context) -> dict:
         "status": snake_value(device.status),
         "battery": device.battery,
         "heartRate": device.heart_rate,
+        "spo2": device.spo2,
         "fallStatus": "FALL" if device.fall_status == FallStatus.FALL else "NO_FALL",
         "fallProbability": device.fall_probability,
         "connectionStatus": snake_value(device.connection_status),
         "rssi": device.rssi,
         "lastUpdated": iso(device.last_updated_utc),
         "lastSync": iso(device.last_sync_utc),
+        "locationUpdatedAt": iso(device.location_updated_at_utc) if device.location_updated_at_utc else None,
         "firmwareVersion": device.firmware_version,
+        "latitude": device.latitude,
+        "longitude": device.longitude,
     }
 
 
@@ -131,6 +138,8 @@ def map_alert(alert: Alert, ctx: Context) -> dict:
         "facilityName": facility.name if facility else alert.facility_id,
         "roomId": alert.room_id,
         "roomName": room.name if room else alert.room_id,
+        "latitude": alert.latitude,
+        "longitude": alert.longitude,
         "message": alert.message,
         "eventAt": iso(alert.event_at_utc),
         "updatedAt": iso(alert.updated_at_utc),
@@ -177,6 +186,9 @@ def map_facility(facility, ctx: Context) -> dict:
         "id": facility.id,
         "name": facility.name,
         "address": facility.address,
+        "latitude": facility.latitude,
+        "longitude": facility.longitude,
+        "phone": facility.phone,
         "totalDevices": len(devices),
         "totalUsers": sum(1 for u in ctx.residents if same(u.facility_id, facility.id)),
         "openAlerts": sum(1 for a in ctx.alerts if same(a.facility_id, facility.id) and a.status != AlertStatus.CLOSED),
@@ -189,8 +201,11 @@ def map_facility(facility, ctx: Context) -> dict:
 
 def map_telemetry(t: Telemetry) -> dict:
     return {
+        "deviceId": t.device_id,
         "timestamp": iso(t.timestamp_utc),
+        "dataSource": t.data_source,
         "heartRate": t.heart_rate,
+        "spo2": t.spo2,
         "battery": t.battery,
         "fallStatus": "FALL" if t.fall_status == FallStatus.FALL else "NO_FALL",
         "fallProbability": t.fall_probability,
@@ -198,6 +213,8 @@ def map_telemetry(t: Telemetry) -> dict:
         "rssi": t.rssi,
         "accel": _vector(t.accel_x, t.accel_y, t.accel_z),
         "gyro": _vector(t.gyro_x, t.gyro_y, t.gyro_z),
+        "latitude": t.latitude,
+        "longitude": t.longitude,
     }
 
 
@@ -341,6 +358,7 @@ class MonitoringService:
                 room_id=room_id,
                 battery=100 if inp.battery is None else inp.battery,
                 heart_rate=inp.heart_rate,
+                spo2=inp.spo2,
                 connection_status=self._parse_initial_connection(inp.status),
                 firmware_version=(inp.firmware_version or "").strip() or "v1.2.4",
                 last_updated_utc=now,
@@ -491,14 +509,44 @@ class MonitoringService:
         phone = inp.phone.strip()
         if not name:
             raise DomainError("Tên cơ sở là bắt buộc.")
+        if (inp.latitude is None) != (inp.longitude is None):
+            raise DomainError("Vĩ độ và kinh độ phải được nhập cùng nhau.")
         with self._lock:
             ctx = self.repo.load_context()
             if any(same(f.name, name) for f in ctx.facilities):
                 raise DomainError("Tên cơ sở đã tồn tại.")
             facility = Facility(id=new_id("FAC"), name=name, address=address, phone=phone)
+            facility.latitude = inp.latitude
+            facility.longitude = inp.longitude
             ctx.facilities.append(facility)
             self.repo.save_facilities(ctx.facilities)
             return map_facility(facility, ctx)
+
+    def update_facility_location(self, facility_id: str, latitude: float, longitude: float) -> dict | None:
+        with self._lock:
+            ctx = self.repo.load_context()
+            facility = _find(ctx.facilities, facility_id)
+            if facility is None:
+                return None
+            facility.latitude = latitude
+            facility.longitude = longitude
+            self.repo.save_facilities(ctx.facilities)
+            return map_facility(facility, ctx)
+
+    async def update_device_location(self, device_id: str, latitude: float, longitude: float) -> dict | None:
+        with self._lock:
+            ctx = self.repo.load_context()
+            device = _find(ctx.devices, device_id)
+            if device is None:
+                return None
+            device.latitude = latitude
+            device.longitude = longitude
+            device.location_updated_at_utc = utcnow()
+            self.repo.save_devices(ctx.devices)
+            result = map_device(device, ctx)
+
+        await self.hub.publish("DeviceUpdated", result, result["facilityId"])
+        return result
 
     def facility_options(self) -> list[dict]:
         """Danh sách cơ sở gọn (id, name) để dựng ô chọn trong trang HTML."""
@@ -508,6 +556,127 @@ class MonitoringService:
         ctx = self.repo.load_context()
         user = _find(ctx.residents, user_id)
         return self._build_user_detail(user, ctx) if user else None
+
+    def authenticate_portal_account(self, username: str) -> PortalAccount | None:
+        account = _find(self.repo.load_context().portal_accounts, username, "username")
+        return account if account and account.active else None
+
+    def portal_resident_options(self) -> list[dict]:
+        ctx = self.repo.load_context()
+        return [map_user(user, ctx) for user in sorted(ctx.residents, key=lambda item: item.full_name.casefold())]
+
+    def list_portal_accounts(self) -> list[dict]:
+        ctx = self.repo.load_context()
+        result = []
+        for account in ctx.portal_accounts:
+            resident = _find(ctx.residents, account.resident_id)
+            facility = _find(ctx.facilities, account.facility_id)
+            staff = _find(ctx.staff, account.staff_id)
+            result.append({
+                "id": account.id,
+                "username": account.username,
+                "role": account.role,
+                "active": account.active,
+                "residentId": account.resident_id,
+                "residentName": resident.full_name if resident else None,
+                "facilityId": account.facility_id,
+                "facilityName": facility.name if facility else None,
+                "staffId": account.staff_id,
+                "staffName": staff.full_name if staff else None,
+            })
+        return sorted(result, key=lambda item: item["username"].casefold())
+
+    def create_portal_account(self, inp: PortalAccountInput) -> dict:
+        username = inp.username.strip().casefold()
+        role = inp.role.strip().casefold()
+        if not re.fullmatch(r"[a-z0-9][a-z0-9._-]{2,39}", username):
+            raise DomainError("Tên đăng nhập cần 3–40 ký tự, chỉ gồm chữ thường, số, dấu chấm, gạch ngang hoặc gạch dưới.")
+        if len(inp.password) < 12:
+            raise DomainError("Mật khẩu portal phải có ít nhất 12 ký tự.")
+        if role not in {"family", "facility"}:
+            raise DomainError("Loại tài khoản phải là family hoặc facility.")
+        if username == self.settings.admin_username.casefold():
+            raise DomainError("Tên đăng nhập này đã được dành cho quản trị viên.")
+
+        with self._lock:
+            ctx = self.repo.load_context()
+            if any(account.username.casefold() == username for account in ctx.portal_accounts):
+                raise DomainError("Tên đăng nhập đã tồn tại.")
+
+            resident_id = inp.resident_id.strip().upper() if inp.resident_id and inp.resident_id.strip() else None
+            facility_id = inp.facility_id.strip().upper() if inp.facility_id and inp.facility_id.strip() else None
+            staff_id = inp.staff_id.strip().upper() if inp.staff_id and inp.staff_id.strip() else None
+            if role == "family":
+                resident = _find(ctx.residents, resident_id)
+                if resident is None:
+                    raise DomainError("Tài khoản người nhà phải được gắn với một bệnh nhân hợp lệ.")
+                facility_id = None
+                staff_id = None
+            else:
+                facility = _find(ctx.facilities, facility_id)
+                if facility is None:
+                    raise DomainError("Tài khoản cơ sở phải được gắn với một cơ sở hợp lệ.")
+                if staff_id:
+                    staff = _find(ctx.staff, staff_id)
+                    if staff is None or not same(staff.facility_id, facility.id):
+                        raise DomainError("Nhân viên không thuộc cơ sở đã chọn.")
+                resident_id = None
+
+            account = PortalAccount(
+                id=new_id("PORTAL"),
+                username=username,
+                password_hash=hash_password(inp.password),
+                role=role,
+                resident_id=resident_id,
+                facility_id=facility_id,
+                staff_id=staff_id,
+            )
+            ctx.portal_accounts.append(account)
+            self.repo.save_portal_accounts(ctx.portal_accounts)
+        return next(item for item in self.list_portal_accounts() if item["id"] == account.id)
+
+    def set_portal_account_active(self, account_id: str, active: bool) -> dict | None:
+        with self._lock:
+            ctx = self.repo.load_context()
+            account = _find(ctx.portal_accounts, account_id)
+            if account is None:
+                return None
+            account.active = active
+            self.repo.save_portal_accounts(ctx.portal_accounts)
+        return next(item for item in self.list_portal_accounts() if item["id"] == account.id)
+
+    def family_portal_data(self, resident_id: str) -> dict | None:
+        ctx = self.repo.load_context()
+        resident = _find(ctx.residents, resident_id)
+        if resident is None:
+            return None
+        detail = self._build_user_detail(resident, ctx)
+        detail.pop("responsibleStaff", None)
+        return detail
+
+    def facility_portal_data(self, facility_id: str) -> dict | None:
+        ctx = self.repo.load_context()
+        facility = _find(ctx.facilities, facility_id)
+        if facility is None:
+            return None
+        users = [u for u in ctx.residents if same(u.facility_id, facility_id)]
+        devices = [d for d in ctx.devices if same(d.facility_id, facility_id)]
+        alerts = sorted(
+            (map_alert(a, ctx) for a in ctx.alerts if same(a.facility_id, facility_id)),
+            key=lambda item: item["eventAt"], reverse=True,
+        )
+        return {
+            "facility": map_facility(facility, ctx),
+            "users": [map_user(user, ctx) for user in users],
+            "devices": [map_device(device, ctx) for device in devices],
+            "alerts": alerts[:20],
+            "metrics": {
+                "users": len(users),
+                "devices": len(devices),
+                "openAlerts": sum(1 for alert in alerts if alert["status"] != "closed"),
+                "fallAlerts": sum(1 for alert in alerts if alert["type"] == "fall"),
+            },
+        }
 
     def create_user(self, inp: UserInput) -> dict:
         self._validate_user_input(inp)
@@ -586,16 +755,30 @@ class MonitoringService:
             device = _find(ctx.devices, inp.device_id)
             if device is None:
                 raise NotFoundError("Không tìm thấy thiết bị.")
+            facility = _find(ctx.facilities, device.facility_id)
+            location_label = (
+                facility.address.strip()
+                if facility and facility.address.strip()
+                else "U07–L16, Khu đô thị mới Dương Nội, Yên Nghĩa, Hà Nội"
+            )
 
             now = utcnow()
             event_time = inp.event_time or now
             if event_time < now - timedelta(hours=max(1, self.settings.telemetry_max_past_hours)):
                 raise DomainError("Telemetry quá cũ và đã bị từ chối.")
+            latitude = inp.latitude if inp.latitude is not None else device.latitude
+            longitude = inp.longitude if inp.longitude is not None else device.longitude
+            location_updated_at = (
+                event_time
+                if inp.latitude is not None and inp.longitude is not None
+                else device.location_updated_at_utc
+            )
 
             telemetry = Telemetry(
                 device_id=device.id,
                 timestamp_utc=event_time,
                 heart_rate=inp.heart_rate,
+                spo2=inp.spo2,
                 battery=inp.battery,
                 fall_status=self._parse_fall(inp.fall_status, device.fall_status),
                 fall_probability=inp.fall_probability,
@@ -608,13 +791,26 @@ class MonitoringService:
                 gyro_x=inp.gyro_x,
                 gyro_y=inp.gyro_y,
                 gyro_z=inp.gyro_z,
+                latitude=latitude,
+                longitude=longitude,
             )
             self.repo.append_telemetry(telemetry)
 
             if event_time < device.last_updated_utc:
                 message = "Telemetry đã được lưu vào lịch sử nhưng không ghi đè trạng thái mới hơn."
+                if telemetry.fall_status == FallStatus.FALL:
+                    created = self._create_alerts_for_telemetry(
+                        device,
+                        telemetry,
+                        ctx,
+                        include_non_fall=False,
+                    )
+                    if created:
+                        self.repo.save_alerts(ctx.alerts)
             else:
                 device.apply_telemetry(telemetry)
+                if inp.latitude is None or inp.longitude is None:
+                    device.location_updated_at_utc = location_updated_at
                 self.repo.save_devices(ctx.devices)
                 created = self._create_alerts_for_telemetry(device, telemetry, ctx)
                 if created:
@@ -623,24 +819,82 @@ class MonitoringService:
 
             device_dto = map_device(device, ctx)
             alert_dtos = [map_alert(a, ctx) for a in created]
+            repeated_fall_alert = None
+            if telemetry.fall_status == FallStatus.FALL:
+                has_new_fall_alert = any(alert.type == AlertType.FALL for alert in created)
+                if not has_new_fall_alert:
+                    repeated_fall_alert = next(
+                        (
+                            alert
+                            for alert in ctx.alerts
+                            if same(alert.device_id, device.id)
+                            and alert.type == AlertType.FALL
+                            and alert.status != AlertStatus.CLOSED
+                            and abs((alert.event_at_utc - event_time).total_seconds()) > 60
+                        ),
+                        None,
+                    )
 
         if applied:
             await self.hub.publish("TelemetryUpdated", map_telemetry(telemetry), device_dto["facilityId"])
             await self.hub.publish("DeviceUpdated", device_dto, device_dto["facilityId"])
-            for alert, dto in zip(created, alert_dtos):
-                await self.hub.publish("AlertCreated", dto, dto["facilityId"])
-                self._spawn(
-                    self.notifier.notify_alert(
-                        AlertNotification(
-                            alert_id=alert.id,
-                            message=alert.message,
-                            severity=dto["severity"],
-                            resident_name=dto["userName"],
-                            location=f"{dto['roomName']} - {dto['facilityName']}",
-                            event_at_utc=alert.event_at_utc,
-                        )
+        for alert, dto in zip(created, alert_dtos):
+            await self.hub.publish("AlertCreated", dto, dto["facilityId"])
+            self._spawn(
+                self.notifier.notify_alert(
+                    AlertNotification(
+                        alert_id=alert.id,
+                        message=alert.message,
+                        severity=dto["severity"],
+                        resident_name=dto["userName"],
+                        location=location_label,
+                        event_at_utc=alert.event_at_utc,
+                        device_id=telemetry.device_id,
+                        latitude=telemetry.latitude,
+                        longitude=telemetry.longitude,
+                        location_updated_at_utc=location_updated_at,
+                        heart_rate=telemetry.heart_rate,
+                        spo2=telemetry.spo2,
+                        battery=telemetry.battery,
+                        fall_probability=telemetry.fall_probability,
+                        rssi=telemetry.rssi,
+                        accel_x=telemetry.accel_x,
+                        accel_y=telemetry.accel_y,
+                        accel_z=telemetry.accel_z,
+                        gyro_x=telemetry.gyro_x,
+                        gyro_y=telemetry.gyro_y,
+                        gyro_z=telemetry.gyro_z,
                     )
                 )
+            )
+        if repeated_fall_alert is not None:
+            self._spawn(
+                self.notifier.notify_alert(
+                    AlertNotification(
+                        alert_id=repeated_fall_alert.id,
+                        message="Có lần té ngã mới được phát hiện; cảnh báo trước đó vẫn đang mở.",
+                        severity=snake_value(telemetry.alert_level or AlertSeverity.HIGH),
+                        resident_name=device_dto["wearerName"],
+                        location=location_label,
+                        event_at_utc=event_time,
+                        device_id=telemetry.device_id,
+                        latitude=telemetry.latitude,
+                        longitude=telemetry.longitude,
+                        location_updated_at_utc=location_updated_at,
+                        heart_rate=telemetry.heart_rate,
+                        spo2=telemetry.spo2,
+                        battery=telemetry.battery,
+                        fall_probability=telemetry.fall_probability,
+                        rssi=telemetry.rssi,
+                        accel_x=telemetry.accel_x,
+                        accel_y=telemetry.accel_y,
+                        accel_z=telemetry.accel_z,
+                        gyro_x=telemetry.gyro_x,
+                        gyro_y=telemetry.gyro_y,
+                        gyro_z=telemetry.gyro_z,
+                    )
+                )
+            )
 
         return {
             "telemetry": map_telemetry(telemetry),
@@ -698,6 +952,8 @@ class MonitoringService:
                 "fall_probability": t.fall_probability,
                 "accel": {"ax": t.accel_x, "ay": t.accel_y, "az": t.accel_z},
                 "gyro": {"gx": t.gyro_x, "gy": t.gyro_y, "gz": t.gyro_z},
+                "latitude": t.latitude,
+                "longitude": t.longitude,
             }
             for t in items
         ]
@@ -731,6 +987,43 @@ class MonitoringService:
             env_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
         return self.notifier.status()
 
+    def support_config(self) -> dict:
+        return {
+            "name": self.settings.support_name,
+            "phone": self.settings.support_phone,
+            "email": self.settings.support_email,
+            "hours": self.settings.support_hours,
+        }
+
+    def configure_support(self, name: str, phone: str, email: str, hours: str) -> dict:
+        self.settings = replace(
+            self.settings,
+            support_name=name.strip(),
+            support_phone=phone.strip(),
+            support_email=email.strip(),
+            support_hours=hours.strip(),
+        )
+        env_path = Path(__file__).resolve().parent.parent / ".env"
+        values = {
+            "SUPPORT_NAME": self.settings.support_name,
+            "SUPPORT_PHONE": self.settings.support_phone,
+            "SUPPORT_EMAIL": self.settings.support_email,
+            "SUPPORT_HOURS": self.settings.support_hours,
+        }
+        lines = env_path.read_text(encoding="utf-8").splitlines() if env_path.is_file() else []
+        updated = []
+        seen = set()
+        for line in lines:
+            key = line.split("=", 1)[0].strip() if "=" in line and not line.lstrip().startswith("#") else ""
+            if key in values:
+                updated.append(f"{key}={values[key]}")
+                seen.add(key)
+            else:
+                updated.append(line)
+        updated.extend(f"{key}={value}" for key, value in values.items() if key not in seen)
+        env_path.write_text("\n".join(updated) + "\n", encoding="utf-8")
+        return self.support_config()
+
     # ---- nội bộ ----------------------------------------------------------------------
     def _spawn(self, coro) -> None:
         async def runner() -> None:
@@ -743,21 +1036,36 @@ class MonitoringService:
         self._tasks.add(task)
         task.add_done_callback(self._tasks.discard)
 
-    def _create_alerts_for_telemetry(self, device: Device, telemetry: Telemetry, ctx: Context) -> list[Alert]:
+    def _create_alerts_for_telemetry(
+        self,
+        device: Device,
+        telemetry: Telemetry,
+        ctx: Context,
+        include_non_fall: bool = True,
+    ) -> list[Alert]:
         specs: list[tuple[AlertType, AlertSeverity, str]] = []
         if telemetry.fall_status == FallStatus.FALL:
             specs.append((AlertType.FALL, telemetry.alert_level or AlertSeverity.HIGH, "Té ngã được phát hiện"))
-        if telemetry.heart_rate is not None and self._has_persistent_abnormal_heart_rate(device.id, telemetry.timestamp_utc):
+        if include_non_fall and telemetry.heart_rate is not None and self._has_persistent_abnormal_heart_rate(device.id, telemetry.timestamp_utc):
             specs.append((
                 AlertType.HEART_RATE,
                 telemetry.alert_level or AlertSeverity.HIGH,
                 f"Nhịp tim bất thường kéo dài: {telemetry.heart_rate} bpm",
             ))
-        if telemetry.connection_status == ConnectionStatus.OFFLINE:
+        if include_non_fall and telemetry.connection_status == ConnectionStatus.OFFLINE:
             specs.append((AlertType.CONNECTION, AlertSeverity.MEDIUM, "Mất kết nối thiết bị"))
-        if telemetry.battery is not None and telemetry.battery <= 20:
+        if include_non_fall and telemetry.battery is not None and telemetry.battery <= 20:
             specs.append((AlertType.LOW_BATTERY, AlertSeverity.LOW, f"Pin yếu ({telemetry.battery}%)"))
-        return [self._new_alert(device, t, s, m, telemetry.timestamp_utc, ctx) for t, s, m in specs]
+        unresolved_types = {
+            alert.type
+            for alert in ctx.alerts
+            if same(alert.device_id, device.id) and alert.status != AlertStatus.CLOSED
+        }
+        return [
+            self._new_alert(device, alert_type, severity, message, telemetry.timestamp_utc, ctx)
+            for alert_type, severity, message in specs
+            if alert_type not in unresolved_types
+        ]
 
     def _has_persistent_abnormal_heart_rate(self, device_id: str, at: datetime) -> bool:
         rules = self.settings
@@ -775,7 +1083,6 @@ class MonitoringService:
         values = [t.heart_rate for t in history]
         if len(values) < required:
             return False
-        return all(v < rules.min_heart_rate for v in values) or all(v > rules.max_heart_rate for v in values)  # type: ignore[operator]
 
     @staticmethod
     def _new_alert(device: Device, type_: AlertType, severity: AlertSeverity, message: str, event_at: datetime, ctx: Context) -> Alert:
@@ -788,6 +1095,8 @@ class MonitoringService:
             user_id=device.user_id,
             facility_id=device.facility_id,
             room_id=device.room_id,
+            latitude=device.latitude,
+            longitude=device.longitude,
             message=message,
             event_at_utc=event_at,
             created_at_utc=now,
@@ -826,8 +1135,13 @@ class MonitoringService:
             for a in alert_dtos[:5]
         ]
         staff = _find(ctx.staff, user.staff_id)
+        facility = _find(ctx.facilities, user.facility_id)
         return {
             "user": map_user(user, ctx),
+            "facilityLocation": {
+                "latitude": facility.latitude if facility else None,
+                "longitude": facility.longitude if facility else None,
+            },
             "contact": {
                 "name": user.contact.name,
                 "relation": user.contact.relation,
@@ -876,6 +1190,8 @@ class MonitoringService:
             raise DomainError("FallProbability phải nằm trong khoảng 0–1.")
         if inp.rssi is not None and not -130 <= inp.rssi <= 0:
             raise DomainError("RSSI phải nằm trong khoảng -130 đến 0 dBm.")
+        if (inp.latitude is None) != (inp.longitude is None):
+            raise DomainError("Latitude và longitude phải được gửi cùng nhau.")
         validate_motion(inp.accel_x, inp.accel_y, inp.accel_z, 1_000, "gia tốc")
         validate_motion(inp.gyro_x, inp.gyro_y, inp.gyro_z, 10_000, "con quay")
 

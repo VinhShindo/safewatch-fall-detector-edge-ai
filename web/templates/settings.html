@@ -3,10 +3,42 @@
 {% block content %}
 <div class="page-heading"><h1>Cài đặt hệ thống</h1></div>
 <section class="section-card settings-card">
+  <h2>Thông tin hỗ trợ</h2>
+  <p>Thông tin này xuất hiện ở thẻ Hỗ trợ trên thanh bên quản trị.</p>
+  <form id="supportConfigForm" class="support-config-form">
+    <label>Tên bộ phận hỗ trợ<input name="name" autocomplete="organization" placeholder="Trung tâm hỗ trợ SeSide"></label>
+    <label>Số điện thoại<input name="phone" type="tel" autocomplete="tel" placeholder="1900 0000"></label>
+    <label>Email<input name="email" type="email" autocomplete="email" placeholder="hotro@example.com"></label>
+    <label>Thời gian hỗ trợ<input name="hours" placeholder="Thứ 2–Thứ 7, 08:00–17:00"></label>
+    <button type="submit" class="btn-primary-sw"><i class="bi bi-save"></i>Lưu thông tin hỗ trợ</button>
+  </form>
+</section>
+<section class="section-card settings-card portal-account-settings">
+  <h2>Tài khoản cổng thông tin</h2>
+  <p>Người nhà chỉ xem hồ sơ được gán; nhân viên cơ sở chỉ xem dữ liệu trong cơ sở được gán. Mật khẩu được lưu dưới dạng hash.</p>
+  <form id="portalAccountForm" class="portal-account-form">
+    <label>Loại tài khoản<select name="role" id="portalAccountRole"><option value="family">Người nhà bệnh nhân</option><option value="facility">Nhân viên cơ sở y tế</option></select></label>
+    <label>Tên đăng nhập<input name="username" required minlength="3" maxlength="40" autocomplete="off"></label>
+    <label>Mật khẩu ban đầu
+      <span class="password-input-wrap">
+        <input id="portalAccountPassword" name="password" type="password" required minlength="12" autocomplete="new-password">
+        <button class="password-visibility-toggle" type="button" data-password-toggle="portalAccountPassword" aria-label="Hiện mật khẩu" aria-pressed="false" title="Hiện mật khẩu"><i class="bi bi-eye" aria-hidden="true"></i></button>
+      </span>
+      <small>Tối thiểu 12 ký tự.</small>
+    </label>
+    <label class="portal-scope-family">Bệnh nhân<select name="residentId" id="portalResidentId"><option value="">Chọn bệnh nhân</option>{% for u in portal_residents %}<option value="{{ u.id }}">{{ u.fullName }} — {{ u.facilityName }}</option>{% endfor %}</select></label>
+    <label class="portal-scope-facility d-none">Cơ sở<select name="facilityId" id="portalFacilityId"><option value="">Chọn cơ sở</option>{% for f in facilities %}<option value="{{ f.id }}">{{ f.name }}</option>{% endfor %}</select></label>
+    <label class="portal-scope-facility d-none">Nhân viên (không bắt buộc)<select name="staffId" id="portalStaffId"><option value="">Không gán nhân viên cụ thể</option>{% for s in portal_staff %}<option value="{{ s.id }}">{{ s.fullName }} — {{ s.role }}</option>{% endfor %}</select></label>
+    <button class="btn-primary-sw" type="submit"><i class="bi bi-person-lock"></i>Tạo tài khoản</button>
+  </form>
+  <div class="table-responsive portal-account-table-wrap"><table class="table sw-table mb-0"><thead><tr><th>Tài khoản</th><th>Vai trò</th><th>Phạm vi</th><th>Trạng thái</th></tr></thead><tbody id="portalAccountRows"><tr><td colspan="4">Đang tải tài khoản...</td></tr></tbody></table></div>
+</section>
+<section class="section-card settings-card">
   <h2>Telegram Bot API</h2>
   <p>Thông tin được lưu vào cấu hình máy chủ. Token không được hiển thị lại trên giao diện.</p>
   <form id="telegramConfigForm" class="telegram-config-form"><label><input type="checkbox" name="enabled"> Bật gửi thông báo Telegram</label><label>Bot token<input name="botToken" type="password" autocomplete="off" placeholder="Nhập bot token mới"></label><label>Chat ID<input name="chatId" placeholder="Nhập Chat ID"></label><button type="submit" class="btn-outline-sw"><i class="bi bi-save"></i>Lưu cấu hình</button></form>
   <div id="telegramStatus">Đang kiểm tra cấu hình...</div>
+  <div id="telegramDeliveryStatus" role="status" aria-live="polite">Đang kiểm tra kết quả gửi gần nhất...</div>
   <button id="testTelegram" class="btn-primary-sw"><i class="bi bi-send"></i>Gửi kiểm tra Telegram</button>
 </section>
 <section class="section-card settings-card telegram-history">
